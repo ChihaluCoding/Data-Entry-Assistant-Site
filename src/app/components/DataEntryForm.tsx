@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useRef, useState, type FormEvent } from "react";
+import { useDeferredValue, useEffect, useRef, useState } from "react";
 import {
   Save,
   Upload,
@@ -261,9 +261,6 @@ const INITIAL_ACTIVE_SUGGESTION_INDEX: Record<SuggestionType, number> = {
 };
 
 const APP_SETTINGS_STORAGE_KEY = "data-entry-tool.settings.v1";
-const SIMPLE_LOGIN_PASSED_STORAGE_KEY = "data-entry-tool.simple-login-passed.v1";
-const SIMPLE_LOGIN_NAME = "admin";
-const SIMPLE_LOGIN_PASS = "chihiro";
 const ENV_BASIC_SHEET_WEBHOOK_URL = (
   import.meta.env.VITE_BASIC_SHEET_WEBHOOK_URL ?? ""
 ).trim();
@@ -1797,20 +1794,6 @@ const postBasicSheetPayload = async (
 };
 
 export function DataEntryForm() {
-  const [isSimpleLoginPassed, setIsSimpleLoginPassed] = useState<boolean>(() => {
-    if (typeof window === "undefined") {
-      return false;
-    }
-
-    try {
-      return window.localStorage.getItem(SIMPLE_LOGIN_PASSED_STORAGE_KEY) === "true";
-    } catch {
-      return false;
-    }
-  });
-  const [simpleLoginName, setSimpleLoginName] = useState("");
-  const [simpleLoginPass, setSimpleLoginPass] = useState("");
-  const [simpleLoginError, setSimpleLoginError] = useState("");
   const [mode, setMode] = useState<"basic" | "resident">("basic");
   const [showNotes, setShowNotes] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -5482,87 +5465,6 @@ export function DataEntryForm() {
       }
     }
   };
-
-  const handleSimpleLogin = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-
-    const isValidCredential =
-      simpleLoginName.trim() === SIMPLE_LOGIN_NAME &&
-      simpleLoginPass === SIMPLE_LOGIN_PASS;
-    if (!isValidCredential) {
-      setSimpleLoginError("name または pass が正しくありません。");
-      return;
-    }
-
-    setSimpleLoginError("");
-    setIsSimpleLoginPassed(true);
-
-    try {
-      window.localStorage.setItem(SIMPLE_LOGIN_PASSED_STORAGE_KEY, "true");
-    } catch {
-      // 保存に失敗した場合はメモリ上の値を使う
-    }
-  };
-
-  if (!isSimpleLoginPassed) {
-    return (
-      <div className="data-entry-form min-h-screen flex items-center justify-center bg-gray-50 px-4">
-        <div className="w-full max-w-sm rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h1 className="text-xl text-gray-900">データ入力補助ツール</h1>
-          <p className="mt-2 text-sm text-gray-600">
-            初回利用時のみ簡易ログインが必要です。
-          </p>
-          <form className="mt-5 space-y-3" onSubmit={handleSimpleLogin}>
-            <div>
-              <label className="block text-sm text-gray-700 mb-1">name</label>
-              <input
-                type="text"
-                value={simpleLoginName}
-                onChange={(event) => {
-                  setSimpleLoginName(event.target.value);
-                  if (simpleLoginError) {
-                    setSimpleLoginError("");
-                  }
-                }}
-                autoComplete="username"
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="name を入力"
-                required
-              />
-            </div>
-            <div>
-              <label className="block text-sm text-gray-700 mb-1">pass</label>
-              <input
-                type="password"
-                value={simpleLoginPass}
-                onChange={(event) => {
-                  setSimpleLoginPass(event.target.value);
-                  if (simpleLoginError) {
-                    setSimpleLoginError("");
-                  }
-                }}
-                autoComplete="current-password"
-                className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="pass を入力"
-                required
-              />
-            </div>
-            {simpleLoginError && (
-              <p className="text-sm text-red-600" role="alert">
-                {simpleLoginError}
-              </p>
-            )}
-            <button
-              type="submit"
-              className="w-full px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-            >
-              ログイン
-            </button>
-          </form>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="data-entry-form h-screen flex bg-gray-50">
