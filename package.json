@@ -1,10 +1,11 @@
 {
   "name": "@figma/my-make-file",
   "private": true,
-  "version": "0.4.28",
+  "version": "0.4.29",
   "type": "module",
   "scripts": {
     "generate:ken-all-index": "node scripts/build-ken-all-index.mjs",
+    "verify:sheet-id": "node scripts/verify-sheet-id-extraction.mjs",
     "prebuild": "npm run generate:ken-all-index",
     "predev": "npm run generate:ken-all-index",
     "build": "vite build",

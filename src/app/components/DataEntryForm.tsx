@@ -22,6 +22,11 @@ import {
 import { loadKenAllData, searchKenAllAddresses, type KenAllAddress } from "../lib/kenAll";
 import { findCitySuggestions, findTownSuggestions } from "../lib/addressSuggestions";
 import {
+  buildSheetUrlWithGid,
+  extractGoogleSheetId,
+  normalizeSheetUrl,
+} from "../lib/googleSheet";
+import {
   checkAddressWithLocalInference,
   type LocalAddressCandidate,
   type LocalAddressCheckResult,
@@ -1255,37 +1260,6 @@ const VirtualSuggestionList = ({
   );
 };
 
-const normalizeSheetUrl = (rawUrl: string): string => {
-  const trimmedUrl = rawUrl.trim();
-  if (!trimmedUrl) {
-    return "";
-  }
-
-  try {
-    const parsedUrl = new URL(trimmedUrl);
-    const isGoogleSheet = parsedUrl.hostname === "docs.google.com";
-    if (!isGoogleSheet || !parsedUrl.pathname.includes("/spreadsheets/")) {
-      return trimmedUrl;
-    }
-
-    parsedUrl.searchParams.delete("rm");
-    parsedUrl.hash = "";
-
-    if (!parsedUrl.pathname.includes("/edit")) {
-      parsedUrl.pathname = parsedUrl.pathname
-        .replace(/\/(pubhtml|preview|htmlview)(\/)?$/, "/edit")
-        .replace(/\/$/, "");
-      if (!parsedUrl.pathname.includes("/edit")) {
-        parsedUrl.pathname = `${parsedUrl.pathname}/edit`;
-      }
-    }
-
-    return parsedUrl.toString();
-  } catch {
-    return trimmedUrl;
-  }
-};
-
 interface ResidentSheetWritePayload {
   action: "appendResidentRow";
   sheetId: string;
@@ -1399,28 +1373,6 @@ interface ResidentSheetWebhookResponse {
   sheets?: SpreadsheetSheetTab[];
   message?: string;
 }
-
-const extractGoogleSheetId = (sheetUrl: string): string => {
-  const match = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
-  return match?.[1] ?? "";
-};
-
-const buildSheetUrlWithGid = (rawUrl: string, gid: string | undefined): string => {
-  const normalizedUrl = normalizeSheetUrl(rawUrl);
-  if (!normalizedUrl) {
-    return "";
-  }
-
-  try {
-    const parsedUrl = new URL(normalizedUrl);
-    if (gid) {
-      parsedUrl.searchParams.set("gid", gid);
-    }
-    return parsedUrl.toString();
-  } catch {
-    return normalizedUrl;
-  }
-};
 
 const joinResidentAddressForSheet = (parts: string[]): string => {
   return parts.map((part) => part.trim()).filter(Boolean).join("");
