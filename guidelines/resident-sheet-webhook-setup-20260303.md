@@ -292,7 +292,7 @@ function handleAppendResidentFolderRows(payload) {
     return jsonResponse({ ok: false, message: "書き込み対象データがありません" });
   }
 
-  var nextRow = findFirstEmptyRowInColumns(sheet, startRow, 3, 3);
+  var nextRow = findFirstWritableResidentFolderRow(sheet, startRow, values.length);
   ensureRowsForWrite(sheet, nextRow, values.length);
   sheet.getRange(nextRow, 3, values.length, 3).setValues(values); // C:D:E
   sheet.getRange(nextRow, 3, values.length, 3).setFontFamily("Meiryo").setFontSize(fontSize);
@@ -423,6 +423,42 @@ function findFirstEmptyRowByColumns(sheet, startRow, columns) {
       return String(values[rowIndex][0] || "").trim() !== "";
     });
     if (!hasValue) {
+      return startRow + rowIndex;
+    }
+  }
+
+  return maxRows + 1;
+}
+
+function findFirstWritableResidentFolderRow(sheet, startRow, rowsNeeded) {
+  var maxRows = sheet.getMaxRows();
+  if (startRow > maxRows) {
+    return startRow;
+  }
+
+  var needed = Math.max(1, Math.floor(Number(rowsNeeded) || 1));
+  var rowCount = maxRows - startRow + 1;
+  var lastColumn = Math.max(sheet.getLastColumn(), 5);
+  var rows = sheet.getRange(startRow, 1, rowCount, lastColumn).getDisplayValues();
+
+  for (var rowIndex = 0; rowIndex <= rows.length - needed; rowIndex++) {
+    var canUseBlock = true;
+    for (var offset = 0; offset < needed; offset++) {
+      var rowValues = rows[rowIndex + offset];
+      var hasValueOutsideCe = rowValues.some(function (value, index) {
+        var column = index + 1;
+        if (column >= 3 && column <= 5) {
+          return false;
+        }
+        return String(value || "").trim() !== "";
+      });
+      if (hasValueOutsideCe) {
+        canUseBlock = false;
+        break;
+      }
+    }
+
+    if (canUseBlock) {
       return startRow + rowIndex;
     }
   }
