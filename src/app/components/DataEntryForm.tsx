@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { loadKenAllData, searchKenAllAddresses, type KenAllAddress } from "../lib/kenAll";
 import { findCitySuggestions, findTownSuggestions } from "../lib/addressSuggestions";
+import { isImeNavigationSuppressed } from "../lib/imeNavigationGuard";
 import {
   buildSheetUrlWithGid,
   extractGoogleSheetId,
@@ -3158,6 +3159,31 @@ export function DataEntryForm() {
     return focusByFieldName(basicFormRef, nextBasicField);
   };
 
+  const isFieldCurrentlyComposing = (fieldName: string) => {
+    switch (fieldName) {
+      case "prefecture":
+        return isPrefectureComposing;
+      case "city":
+        return isCityComposing;
+      case "town":
+        return isTownComposing;
+      case "departPrefecture":
+        return residentComposing.depart.prefecture;
+      case "departCity":
+        return residentComposing.depart.city;
+      case "departTown":
+        return residentComposing.depart.town;
+      case "registryPrefecture":
+        return residentComposing.registry.prefecture;
+      case "registryCity":
+        return residentComposing.registry.city;
+      case "registryTown":
+        return residentComposing.registry.town;
+      default:
+        return false;
+    }
+  };
+
   const handleBasicFormNavigation = (
     e: React.KeyboardEvent<HTMLDivElement>
   ) => {
@@ -3175,6 +3201,18 @@ export function DataEntryForm() {
     const isNavigationKey =
       e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowUp";
     if (!isNavigationKey) {
+      return;
+    }
+
+    const nativeEvent = e.nativeEvent as KeyboardEvent & { keyCode?: number };
+    if (
+      isImeNavigationSuppressed({
+        key: e.key,
+        nativeIsComposing: nativeEvent.isComposing,
+        legacyKeyCode: nativeEvent.keyCode,
+        isFieldComposing: isFieldCurrentlyComposing(fieldName),
+      })
+    ) {
       return;
     }
 
@@ -3200,6 +3238,18 @@ export function DataEntryForm() {
     const isNavigationKey =
       e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowUp";
     if (!isNavigationKey) {
+      return;
+    }
+
+    const nativeEvent = e.nativeEvent as KeyboardEvent & { keyCode?: number };
+    if (
+      isImeNavigationSuppressed({
+        key: e.key,
+        nativeIsComposing: nativeEvent.isComposing,
+        legacyKeyCode: nativeEvent.keyCode,
+        isFieldComposing: isFieldCurrentlyComposing(fieldName),
+      })
+    ) {
       return;
     }
 

@@ -1,7 +1,7 @@
 {
   "name": "@figma/my-make-file",
   "private": true,
-  "version": "0.4.29",
+  "version": "0.4.30",
   "type": "module",
   "scripts": {
     "generate:ken-all-index": "node scripts/build-ken-all-index.mjs",
@@ -9,7 +9,8 @@
     "prebuild": "npm run generate:ken-all-index",
     "predev": "npm run generate:ken-all-index",
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "test:ime-navigation-guard": "node --test scripts/test-ime-navigation-guard.mjs"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
