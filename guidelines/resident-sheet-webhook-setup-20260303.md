@@ -295,12 +295,12 @@ function handleAppendResidentFolderRows(payload) {
     return jsonResponse({ ok: false, message: "書き込み対象データがありません" });
   }
 
-  var nextRow = findFirstWritableResidentFolderRow(
+  var nextRow = findFirstEmptyBlockInColumns(
     sheet,
     startRow,
-    values.length,
     3,
-    writeToColumnF ? 6 : 5
+    values[0].length,
+    values.length
   );
   ensureRowsForWrite(sheet, nextRow, values.length);
   sheet.getRange(nextRow, 3, values.length, values[0].length).setValues(values);
@@ -419,6 +419,40 @@ function findFirstEmptyRowInColumns(sheet, startRow, startColumn, columnCount) {
   return maxRows + 1;
 }
 
+function findFirstEmptyBlockInColumns(sheet, startRow, startColumn, columnCount, rowsNeeded) {
+  var maxRows = sheet.getMaxRows();
+  if (startRow > maxRows) {
+    return startRow;
+  }
+
+  var needed = Math.max(1, Math.floor(Number(rowsNeeded) || 1));
+  var rowCount = maxRows - startRow + 1;
+  var values = sheet
+    .getRange(startRow, startColumn, rowCount, columnCount)
+    .getDisplayValues();
+
+  for (var rowIndex = 0; rowIndex <= values.length - needed; rowIndex++) {
+    var canUseBlock = true;
+
+    for (var offset = 0; offset < needed; offset++) {
+      var rowValues = values[rowIndex + offset];
+      var hasValue = rowValues.some(function (value) {
+        return String(value || "").trim() !== "";
+      });
+      if (hasValue) {
+        canUseBlock = false;
+        break;
+      }
+    }
+
+    if (canUseBlock) {
+      return startRow + rowIndex;
+    }
+  }
+
+  return maxRows + 1;
+}
+
 function findFirstEmptyRowByColumns(sheet, startRow, columns) {
   var maxRows = sheet.getMaxRows();
   if (startRow > maxRows) {
@@ -435,44 +469,6 @@ function findFirstEmptyRowByColumns(sheet, startRow, columns) {
       return String(values[rowIndex][0] || "").trim() !== "";
     });
     if (!hasValue) {
-      return startRow + rowIndex;
-    }
-  }
-
-  return maxRows + 1;
-}
-
-function findFirstWritableResidentFolderRow(sheet, startRow, rowsNeeded, writeStartColumn, writeEndColumn) {
-  var maxRows = sheet.getMaxRows();
-  if (startRow > maxRows) {
-    return startRow;
-  }
-
-  var needed = Math.max(1, Math.floor(Number(rowsNeeded) || 1));
-  var startColumn = Math.max(1, Math.floor(Number(writeStartColumn) || 3));
-  var endColumn = Math.max(startColumn, Math.floor(Number(writeEndColumn) || 5));
-  var rowCount = maxRows - startRow + 1;
-  var lastColumn = Math.max(sheet.getLastColumn(), endColumn);
-  var rows = sheet.getRange(startRow, 1, rowCount, lastColumn).getDisplayValues();
-
-  for (var rowIndex = 0; rowIndex <= rows.length - needed; rowIndex++) {
-    var canUseBlock = true;
-    for (var offset = 0; offset < needed; offset++) {
-      var rowValues = rows[rowIndex + offset];
-      var hasValueOutsideWriteColumns = rowValues.some(function (value, index) {
-        var column = index + 1;
-        if (column >= startColumn && column <= endColumn) {
-          return false;
-        }
-        return String(value || "").trim() !== "";
-      });
-      if (hasValueOutsideWriteColumns) {
-        canUseBlock = false;
-        break;
-      }
-    }
-
-    if (canUseBlock) {
       return startRow + rowIndex;
     }
   }

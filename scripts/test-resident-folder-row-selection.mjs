@@ -1,58 +1,99 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-function normalizeCell(value) {
-  return String(value || "").trim();
-}
+function resolveResidentFolderWriteStartRow({
+  sheetRows,
+  startRow,
+  rowsNeeded,
+  writeToColumnF,
+}) {
+  const targetStartIndex = 2;
+  const targetEndIndex = writeToColumnF ? 5 : 4;
+  const needed = Math.max(1, Math.floor(Number(rowsNeeded) || 1));
+  const normalizedRows = Array.isArray(sheetRows) ? sheetRows : [];
 
-function rowHasValueOutsideCe(row) {
-  return row.some((value, index) => {
-    const column = index + 1;
-    if (column >= 3 && column <= 5) {
-      return false;
-    }
-    return normalizeCell(value) !== "";
-  });
-}
+  for (let rowIndex = startRow - 1; rowIndex <= normalizedRows.length - needed; rowIndex += 1) {
+    let canUseBlock = true;
 
-function findFirstWritableResidentFolderRow(rows, startRow, rowsNeeded) {
-  for (let rowIndex = 0; rowIndex <= rows.length - rowsNeeded; rowIndex += 1) {
-    let isWritableBlock = true;
-    for (let offset = 0; offset < rowsNeeded; offset += 1) {
-      if (rowHasValueOutsideCe(rows[rowIndex + offset])) {
-        isWritableBlock = false;
+    for (let offset = 0; offset < needed; offset += 1) {
+      const row = normalizedRows[rowIndex + offset] || [];
+      const targetValues = row.slice(targetStartIndex, targetEndIndex + 1);
+      const hasValue = targetValues.some((value) => String(value || "").trim() !== "");
+      if (hasValue) {
+        canUseBlock = false;
         break;
       }
     }
-    if (isWritableBlock) {
-      return startRow + rowIndex;
+
+    if (canUseBlock) {
+      return rowIndex + 1;
     }
   }
-  return startRow + rows.length;
+
+  return normalizedRows.length + 1;
 }
 
-test("C:E だけ既存値の行は再利用対象になる", () => {
-  const rows = [
-    ["", "", "oldC", "oldD", "oldE", "", ""],
-    ["", "", "", "", "", "", ""],
-  ];
-  assert.equal(findFirstWritableResidentFolderRow(rows, 6, 1), 6);
+function createSheetRows(totalRows) {
+  return Array.from({ length: totalRows }, () => Array.from({ length: 6 }, () => ""));
+}
+
+test("C:E モードでは C:E に既存値がある行を飛ばす", () => {
+  const sheetRows = createSheetRows(8);
+  sheetRows[5][2] = "既存C";
+
+  assert.equal(
+    resolveResidentFolderWriteStartRow({
+      sheetRows,
+      startRow: 6,
+      rowsNeeded: 1,
+      writeToColumnF: false,
+    }),
+    7
+  );
 });
 
-test("C:E 以外に値がある行は従来どおりスキップする", () => {
-  const rows = [
-    ["", "Bあり", "oldC", "oldD", "oldE", "", ""],
-    ["", "", "", "", "", "", ""],
-  ];
-  assert.equal(findFirstWritableResidentFolderRow(rows, 6, 1), 7);
+test("C:F モードでは F 列だけ埋まっていてもその行を飛ばす", () => {
+  const sheetRows = createSheetRows(8);
+  sheetRows[5][5] = "既存F";
+
+  assert.equal(
+    resolveResidentFolderWriteStartRow({
+      sheetRows,
+      startRow: 6,
+      rowsNeeded: 1,
+      writeToColumnF: true,
+    }),
+    7
+  );
 });
 
-test("複数行書き込みは連続して再利用可能なブロックを探す", () => {
-  const rows = [
-    ["", "", "old1", "old1", "old1", "", ""],
-    ["", "Bあり", "", "", "", "", ""],
-    ["", "", "old3", "old3", "old3", "", ""],
-    ["", "", "", "", "", "", ""],
-  ];
-  assert.equal(findFirstWritableResidentFolderRow(rows, 6, 2), 8);
+test("対象外列に値があっても C:E が空ならその行を使う", () => {
+  const sheetRows = createSheetRows(8);
+  sheetRows[5][0] = "氏名";
+  sheetRows[5][1] = "かな";
+
+  assert.equal(
+    resolveResidentFolderWriteStartRow({
+      sheetRows,
+      startRow: 6,
+      rowsNeeded: 1,
+      writeToColumnF: false,
+    }),
+    6
+  );
+});
+
+test("複数行書き込みでは連続で空いている最初のブロックを探す", () => {
+  const sheetRows = createSheetRows(10);
+  sheetRows[6][2] = "既存C";
+
+  assert.equal(
+    resolveResidentFolderWriteStartRow({
+      sheetRows,
+      startRow: 6,
+      rowsNeeded: 2,
+      writeToColumnF: false,
+    }),
+    8
+  );
 });
