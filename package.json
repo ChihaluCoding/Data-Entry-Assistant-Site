@@ -1,7 +1,7 @@
 {
   "name": "@figma/my-make-file",
   "private": true,
-  "version": "0.4.30",
+  "version": "0.4.31",
   "type": "module",
   "scripts": {
     "generate:ken-all-index": "node scripts/build-ken-all-index.mjs",
@@ -10,7 +10,8 @@
     "predev": "npm run generate:ken-all-index",
     "build": "vite build",
     "dev": "vite",
-    "test:ime-navigation-guard": "node --test scripts/test-ime-navigation-guard.mjs"
+    "test:ime-navigation-guard": "node --test scripts/test-ime-navigation-guard.mjs",
+    "test:banchi-normalization": "node --test scripts/test-banchi-normalization.mjs"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

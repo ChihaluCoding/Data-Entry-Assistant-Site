@@ -21,6 +21,10 @@ import {
 } from "lucide-react";
 import { loadKenAllData, searchKenAllAddresses, type KenAllAddress } from "../lib/kenAll";
 import { findCitySuggestions, findTownSuggestions } from "../lib/addressSuggestions";
+import {
+  normalizeBanchiValueAsFullWidth,
+  normalizeBanchiValueAsHalfWidth,
+} from "../lib/banchiNormalization.js";
 import { isImeNavigationSuppressed } from "../lib/imeNavigationGuard";
 import {
   buildSheetUrlWithGid,
@@ -473,7 +477,7 @@ const normalizeResidentFormDataFromUnknown = (value: unknown): ResidentFormData 
     departOoaza: readStringField(record, "departOoaza"),
     departAza: readStringField(record, "departAza"),
     departKoaza: readStringField(record, "departKoaza"),
-    departBanchi: normalizeBanchiValueAsHalfWidth(
+    departBanchi: normalizeBanchiValueAsFullWidth(
       readStringField(record, "departBanchi")
     ),
     departBuilding: readStringField(record, "departBuilding"),
@@ -484,7 +488,7 @@ const normalizeResidentFormDataFromUnknown = (value: unknown): ResidentFormData 
     registryOoaza: readStringField(record, "registryOoaza"),
     registryAza: readStringField(record, "registryAza"),
     registryKoaza: readStringField(record, "registryKoaza"),
-    registryBanchi: normalizeBanchiValueAsHalfWidth(
+    registryBanchi: normalizeBanchiValueAsFullWidth(
       readStringField(record, "registryBanchi")
     ),
     registryBuilding: readStringField(record, "registryBuilding"),
@@ -1010,12 +1014,6 @@ const sanitizeTownValue = (rawValue: string): string => {
     .trim();
 };
 
-const toFullWidthDigits = (rawValue: string): string => {
-  return rawValue.replace(/[0-9]/g, (char) =>
-    String.fromCharCode(char.charCodeAt(0) + 0xfee0)
-  );
-};
-
 const toHalfWidthDigits = (rawValue: string): string => {
   return rawValue.replace(/[０-９]/g, (char) =>
     String.fromCharCode(char.charCodeAt(0) - 0xfee0)
@@ -1027,46 +1025,6 @@ const toFullWidthAlphabet = (rawValue: string): string => {
     String.fromCharCode(char.charCodeAt(0) + 0xfee0)
   );
 };
-
-const toHalfWidthAlphabet = (rawValue: string): string => {
-  return rawValue.replace(/[Ａ-Ｚａ-ｚ]/g, (char) =>
-    String.fromCharCode(char.charCodeAt(0) - 0xfee0)
-  );
-};
-
-const formatBanchiValue = (
-  rawValue: string,
-  options?: {
-    halfWidthAlphaNumeric?: boolean;
-    halfWidthHyphen?: boolean;
-  }
-): string => {
-  const trimmed = rawValue.trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  const shiftedNormalized = trimmed.replace(/[!@#$%^&*()]/g, (char) => {
-    return SHIFTED_NUMBER_TO_DIGIT_MAP[char] ?? char;
-  });
-  const normalized = shiftedNormalized.normalize("NFKC");
-
-  const normalizedAlphaNumeric = options?.halfWidthAlphaNumeric
-    ? toHalfWidthAlphabet(toHalfWidthDigits(normalized))
-    : toFullWidthAlphabet(toFullWidthDigits(normalized));
-
-  return normalizedAlphaNumeric.replace(
-    /[-‐‑‒–—―ｰー]/g,
-    options?.halfWidthHyphen ? "-" : "－"
-  );
-};
-
-function normalizeBanchiValueAsHalfWidth(rawValue: string): string {
-  return formatBanchiValue(rawValue, {
-    halfWidthAlphaNumeric: true,
-    halfWidthHyphen: true,
-  });
-}
 
 const AREA_FIELD_PREFIXES = {
   ooaza: "大字",
@@ -3494,7 +3452,7 @@ export function DataEntryForm() {
     if (name === "departBanchi" || name === "registryBanchi") {
       setResidentFormData((prev) => ({
         ...prev,
-        [name]: normalizeBanchiValueAsHalfWidth(value),
+        [name]: normalizeBanchiValueAsFullWidth(value),
       }));
       return;
     }
