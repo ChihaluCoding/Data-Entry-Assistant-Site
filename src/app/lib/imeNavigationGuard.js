@@ -1,5 +1,5 @@
 /**
- * IME候補確定に使われた Enter だけをフォーム移動対象から除外する。
+ * IME候補操作に使われた Enter / ↑ / ↓ をフォーム移動対象から除外する。
  *
  * @param {{
  *   key: string;
@@ -15,7 +15,7 @@ export function isImeNavigationSuppressed({
   legacyKeyCode,
   isFieldComposing = false,
 }) {
-  if (key !== "Enter") {
+  if (key !== "Enter" && key !== "ArrowDown" && key !== "ArrowUp") {
     return false;
   }
 
