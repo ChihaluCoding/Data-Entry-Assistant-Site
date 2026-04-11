@@ -815,7 +815,6 @@ interface AppSettings {
   fixedResidentSelfName: string;
   isBasicSecondarySheetEnabled: boolean;
   isResidentSecondaryColumnBUppercase: boolean;
-  isResidentFolderWriteToColumnF: boolean;
   basicSheetWebhookUrl: string;
   residentSheetWebhookUrl: string;
   basicSheetUrl: string;
@@ -837,7 +836,6 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
   fixedResidentSelfName: "",
   isBasicSecondarySheetEnabled: false,
   isResidentSecondaryColumnBUppercase: true,
-  isResidentFolderWriteToColumnF: false,
   basicSheetWebhookUrl: ENV_BASIC_SHEET_WEBHOOK_URL,
   residentSheetWebhookUrl: ENV_RESIDENT_SHEET_WEBHOOK_URL,
   basicSheetUrl: ENV_BASIC_SHEET_URL,
@@ -1245,7 +1243,6 @@ interface ResidentFolderSheetWriteRow {
   C: string;
   D: string;
   E: string;
-  F?: string;
 }
 
 interface ResidentFolderSheetWritePayload {
@@ -1254,7 +1251,6 @@ interface ResidentFolderSheetWritePayload {
   sheetName: string;
   startRow: number;
   fontSize?: number;
-  writeToColumnF?: boolean;
   rows: ResidentFolderSheetWriteRow[];
 }
 
@@ -1507,7 +1503,6 @@ const buildResidentFolderSheetRows = (files: File[]): ResidentFolderSheetWriteRo
     C: entry.rootFolder,
     D: entry.childFolder,
     E: entry.fileName,
-    F: "",
   }));
 };
 
@@ -5050,7 +5045,6 @@ export function DataEntryForm() {
       sheetName: normalizedTargetSheetName,
       startRow: RESIDENT_SHEET_START_ROW,
       fontSize: settings.writeFontSize,
-      writeToColumnF: settings.isResidentFolderWriteToColumnF,
       rows,
     };
 
@@ -8525,19 +8519,6 @@ export function DataEntryForm() {
                 }
               />
               住民票シート2のB列ファイル名を大文字化する
-            </label>
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={settings.isResidentFolderWriteToColumnF}
-                onChange={(e) =>
-                  setSettings((prev) => ({
-                    ...prev,
-                    isResidentFolderWriteToColumnF: e.target.checked,
-                  }))
-                }
-              />
-              住民票フォルダ書き込みをC:Fにする
             </label>
             <details className="rounded border border-gray-200 bg-gray-50 p-3">
               <summary className="cursor-pointer text-xs font-semibold text-gray-700">

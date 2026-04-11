@@ -1,7 +1,7 @@
 {
   "name": "@figma/my-make-file",
   "private": true,
-  "version": "0.4.39",
+  "version": "0.4.40",
   "type": "module",
   "scripts": {
     "generate:ken-all-index": "node scripts/build-ken-all-index.mjs",
@@ -12,8 +12,7 @@
     "dev": "vite",
     "test:ime-navigation-guard": "node --test scripts/test-ime-navigation-guard.mjs",
     "test:banchi-normalization": "node --test scripts/test-banchi-normalization.mjs",
-    "test:resident-folder-row-selection": "node --test scripts/test-resident-folder-row-selection.mjs",
-    "test:resident-folder-write-range": "node --test scripts/test-resident-folder-write-range.mjs"
+    "test:resident-folder-row-selection": "node --test scripts/test-resident-folder-row-selection.mjs"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

@@ -4,28 +4,17 @@ import assert from "node:assert/strict";
 function resolveResidentFolderWriteStartRow({
   sheetRows,
   startRow,
-  rowsNeeded,
-  writeToColumnF,
+  columnCount,
 }) {
   const targetStartIndex = 2;
-  const targetEndIndex = writeToColumnF ? 5 : 4;
-  const needed = Math.max(1, Math.floor(Number(rowsNeeded) || 1));
+  const targetEndIndex = targetStartIndex + Math.max(1, Math.floor(Number(columnCount) || 3)) - 1;
   const normalizedRows = Array.isArray(sheetRows) ? sheetRows : [];
 
-  for (let rowIndex = startRow - 1; rowIndex <= normalizedRows.length - needed; rowIndex += 1) {
-    let canUseBlock = true;
-
-    for (let offset = 0; offset < needed; offset += 1) {
-      const row = normalizedRows[rowIndex + offset] || [];
-      const targetValues = row.slice(targetStartIndex, targetEndIndex + 1);
-      const hasValue = targetValues.some((value) => String(value || "").trim() !== "");
-      if (hasValue) {
-        canUseBlock = false;
-        break;
-      }
-    }
-
-    if (canUseBlock) {
+  for (let rowIndex = startRow - 1; rowIndex < normalizedRows.length; rowIndex += 1) {
+    const row = normalizedRows[rowIndex] || [];
+    const targetValues = row.slice(targetStartIndex, targetEndIndex + 1);
+    const hasValue = targetValues.some((value) => String(value || "").trim() !== "");
+    if (!hasValue) {
       return rowIndex + 1;
     }
   }
@@ -45,23 +34,7 @@ test("C:E モードでは C:E に既存値がある行を飛ばす", () => {
     resolveResidentFolderWriteStartRow({
       sheetRows,
       startRow: 6,
-      rowsNeeded: 1,
-      writeToColumnF: false,
-    }),
-    7
-  );
-});
-
-test("C:F モードでは F 列だけ埋まっていてもその行を飛ばす", () => {
-  const sheetRows = createSheetRows(8);
-  sheetRows[5][5] = "既存F";
-
-  assert.equal(
-    resolveResidentFolderWriteStartRow({
-      sheetRows,
-      startRow: 6,
-      rowsNeeded: 1,
-      writeToColumnF: true,
+      columnCount: 3,
     }),
     7
   );
@@ -76,24 +49,22 @@ test("対象外列に値があっても対象列が空ならその行を使う",
     resolveResidentFolderWriteStartRow({
       sheetRows,
       startRow: 6,
-      rowsNeeded: 1,
-      writeToColumnF: false,
+      columnCount: 3,
     }),
     6
   );
 });
 
-test("複数行書き込みでは連続で空いている最初のブロックを探す", () => {
+test("最初の空行だけを返し、後続行の埋まり具合は見ない", () => {
   const sheetRows = createSheetRows(10);
-  sheetRows[6][2] = "既存C";
+  sheetRows[6][2] = "後続行の既存値";
 
   assert.equal(
     resolveResidentFolderWriteStartRow({
       sheetRows,
       startRow: 6,
-      rowsNeeded: 2,
-      writeToColumnF: false,
+      columnCount: 3,
     }),
-    8
+    6
   );
 });
