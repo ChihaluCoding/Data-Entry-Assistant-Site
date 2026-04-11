@@ -5104,7 +5104,6 @@ export function DataEntryForm() {
     residentFormData,
     basicSheetWebhookConfig,
     residentSheetWebhookConfig,
-    selectedSheetIdByMode,
     selectedSheetTabBySheetId,
     activeSheetId,
     activeSelectedSheetName,
