@@ -24,6 +24,11 @@ const cases = [
     expected: "1",
   },
   {
+    name: "ひらがなの番地区切りも全角マイナスへ正規化される",
+    input: "3ちょうめ42ばん19ごう",
+    expected: "3－42－19",
+  },
+  {
     name: "空白だけの入力は空文字になる（異常系）",
     input: "  　",
     expected: "",

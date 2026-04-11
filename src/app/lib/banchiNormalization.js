@@ -53,7 +53,7 @@ const formatBanchiValue = (rawValue, options = {}) => {
   const hyphen = options.halfWidthHyphen ? "-" : "－";
 
   return normalizedAlphaNumeric
-    .replace(/(丁目|番地|番|号)/g, hyphen)
+    .replace(/(丁目|番地|番|号|ちょうめ|ばんち|ばん|ごう)/g, hyphen)
     .replace(/[-‐‑‒–—―ｰー－]+/g, hyphen)
     .replace(new RegExp(`^${hyphen}+|${hyphen}+$`, "g"), "");
 };
