@@ -1,7 +1,7 @@
 {
   "name": "@figma/my-make-file",
   "private": true,
-  "version": "0.4.41",
+  "version": "0.4.42",
   "type": "module",
   "scripts": {
     "generate:ken-all-index": "node scripts/build-ken-all-index.mjs",
@@ -10,6 +10,7 @@
     "predev": "npm run generate:ken-all-index",
     "build": "vite build",
     "dev": "vite",
+    "test:area-field-value": "node --test scripts/test-area-field-value.mjs",
     "test:ime-navigation-guard": "node --test scripts/test-ime-navigation-guard.mjs",
     "test:banchi-normalization": "node --test scripts/test-banchi-normalization.mjs",
     "test:resident-folder-row-selection": "node --test scripts/test-resident-folder-row-selection.mjs"

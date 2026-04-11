@@ -25,6 +25,11 @@ import {
   normalizeBanchiValueAsFullWidth,
   normalizeBanchiValueAsHalfWidth,
 } from "../lib/banchiNormalization.js";
+import {
+  formatAreaFieldValue,
+  isNativeImeComposing,
+  resolveAreaFieldValue,
+} from "../lib/areaFieldValue.js";
 import { isImeNavigationSuppressed } from "../lib/imeNavigationGuard";
 import {
   buildSheetUrlWithGid,
@@ -1025,45 +1030,6 @@ const toFullWidthAlphabet = (rawValue: string): string => {
     String.fromCharCode(char.charCodeAt(0) + 0xfee0)
   );
 };
-
-const AREA_FIELD_PREFIXES = {
-  ooaza: "大字",
-  aza: "字",
-  koaza: "小字",
-  departOoaza: "大字",
-  departAza: "字",
-  departKoaza: "小字",
-  registryOoaza: "大字",
-  registryAza: "字",
-  registryKoaza: "小字",
-} as const;
-
-const escapeRegExp = (value: string): string => {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-};
-
-const formatAreaFieldValue = (fieldName: string, rawValue: string): string => {
-  const prefix = AREA_FIELD_PREFIXES[fieldName as keyof typeof AREA_FIELD_PREFIXES];
-  if (!prefix) {
-    return rawValue;
-  }
-
-  const trimmed = rawValue.trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  const normalizedBody = trimmed.replace(
-    new RegExp(`^(?:${escapeRegExp(prefix)}[\\s　]*)+`),
-    ""
-  );
-  if (!normalizedBody) {
-    return "";
-  }
-
-  return `${prefix}${normalizedBody}`;
-};
-
 
 const normalizeBuildingValue = (rawValue: string): string => {
   return toFullWidthAlphabet(toHalfWidthDigits(rawValue));
@@ -2999,7 +2965,11 @@ export function DataEntryForm() {
     if (name === "ooaza" || name === "aza" || name === "koaza") {
       setFormData((prev) => ({
         ...prev,
-        [name]: formatAreaFieldValue(name, value),
+        [name]: resolveAreaFieldValue(
+          name,
+          value,
+          isNativeImeComposing(e.nativeEvent)
+        ),
       }));
       return;
     }
@@ -3115,6 +3085,20 @@ export function DataEntryForm() {
     }
 
     return focusByFieldName(basicFormRef, nextBasicField);
+  };
+
+  const handleBasicAreaCompositionEnd = (
+    e: React.CompositionEvent<HTMLInputElement>
+  ) => {
+    const { name, value } = e.currentTarget;
+    if (name !== "ooaza" && name !== "aza" && name !== "koaza") {
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      [name]: formatAreaFieldValue(name, value),
+    }));
   };
 
   const isFieldCurrentlyComposing = (fieldName: string) => {
@@ -3475,7 +3459,11 @@ export function DataEntryForm() {
     ) {
       setResidentFormData((prev) => ({
         ...prev,
-        [name]: formatAreaFieldValue(name, value),
+        [name]: resolveAreaFieldValue(
+          name,
+          value,
+          isNativeImeComposing(e.nativeEvent)
+        ),
       }));
       return;
     }
@@ -3483,6 +3471,27 @@ export function DataEntryForm() {
     setResidentFormData((prev) => ({
       ...prev,
       [name]: value,
+    }));
+  };
+
+  const handleResidentAreaCompositionEnd = (
+    e: React.CompositionEvent<HTMLInputElement>
+  ) => {
+    const { name, value } = e.currentTarget;
+    if (
+      name !== "departOoaza" &&
+      name !== "departAza" &&
+      name !== "departKoaza" &&
+      name !== "registryOoaza" &&
+      name !== "registryAza" &&
+      name !== "registryKoaza"
+    ) {
+      return;
+    }
+
+    setResidentFormData((prev) => ({
+      ...prev,
+      [name]: formatAreaFieldValue(name, value),
     }));
   };
 
@@ -6172,6 +6181,7 @@ export function DataEntryForm() {
                       name="ooaza"
                       value={formData.ooaza}
                       onChange={handleChange}
+                      onCompositionEnd={handleBasicAreaCompositionEnd}
                       className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="大字を入力"
                     />
@@ -6187,6 +6197,7 @@ export function DataEntryForm() {
                       name="aza"
                       value={formData.aza}
                       onChange={handleChange}
+                      onCompositionEnd={handleBasicAreaCompositionEnd}
                       className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="字を入力"
                     />
@@ -6202,6 +6213,7 @@ export function DataEntryForm() {
                       name="koaza"
                       value={formData.koaza}
                       onChange={handleChange}
+                      onCompositionEnd={handleBasicAreaCompositionEnd}
                       className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="小字を入力"
                     />
@@ -7250,6 +7262,7 @@ export function DataEntryForm() {
                         name="departOoaza"
                         value={residentFormData.departOoaza}
                         onChange={handleResidentChange}
+                        onCompositionEnd={handleResidentAreaCompositionEnd}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="転出大字を入力"
                       />
@@ -7265,6 +7278,7 @@ export function DataEntryForm() {
                         name="departAza"
                         value={residentFormData.departAza}
                         onChange={handleResidentChange}
+                        onCompositionEnd={handleResidentAreaCompositionEnd}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="転出字を入力"
                       />
@@ -7280,6 +7294,7 @@ export function DataEntryForm() {
                         name="departKoaza"
                         value={residentFormData.departKoaza}
                         onChange={handleResidentChange}
+                        onCompositionEnd={handleResidentAreaCompositionEnd}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="転出小字を入力"
                       />
@@ -7732,6 +7747,7 @@ export function DataEntryForm() {
                         name="registryOoaza"
                         value={residentFormData.registryOoaza}
                         onChange={handleResidentChange}
+                        onCompositionEnd={handleResidentAreaCompositionEnd}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="本籍大字を入力"
                       />
@@ -7747,6 +7763,7 @@ export function DataEntryForm() {
                         name="registryAza"
                         value={residentFormData.registryAza}
                         onChange={handleResidentChange}
+                        onCompositionEnd={handleResidentAreaCompositionEnd}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="本籍字を入力"
                       />
@@ -7762,6 +7779,7 @@ export function DataEntryForm() {
                         name="registryKoaza"
                         value={residentFormData.registryKoaza}
                         onChange={handleResidentChange}
+                        onCompositionEnd={handleResidentAreaCompositionEnd}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="本籍小字を入力"
                       />
