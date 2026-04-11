@@ -50,16 +50,18 @@ const formatBanchiValue = (rawValue, options = {}) => {
     ? toHalfWidthAlphabet(toHalfWidthDigits(normalized))
     : toFullWidthAlphabet(toFullWidthDigits(normalized));
 
-  return normalizedAlphaNumeric.replace(
-    /[-‐‑‒–—―ｰー]/g,
-    options.halfWidthHyphen ? "-" : "－"
-  );
+  const hyphen = options.halfWidthHyphen ? "-" : "－";
+
+  return normalizedAlphaNumeric
+    .replace(/(丁目|番地|番|号)/g, hyphen)
+    .replace(/[-‐‑‒–—―ｰー－]+/g, hyphen)
+    .replace(new RegExp(`^${hyphen}+|${hyphen}+$`, "g"), "");
 };
 
 export function normalizeBanchiValueAsHalfWidth(rawValue) {
   return formatBanchiValue(rawValue, {
     halfWidthAlphaNumeric: true,
-    halfWidthHyphen: true,
+    halfWidthHyphen: false,
   });
 }
 
