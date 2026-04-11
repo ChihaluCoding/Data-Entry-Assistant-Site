@@ -32,6 +32,11 @@ import {
 } from "../lib/areaFieldValue.js";
 import { isImeNavigationSuppressed } from "../lib/imeNavigationGuard";
 import {
+  getReloadStateBehavior,
+  isReloadPersistenceEnabled,
+} from "../lib/reloadStateBehavior.js";
+import { getWriteShortcutAction } from "../lib/writeShortcut.js";
+import {
   buildSheetUrlWithGid,
   extractGoogleSheetId,
   normalizeSheetUrl,
@@ -4349,6 +4354,47 @@ export function DataEntryForm() {
     );
   };
 
+  const handleBasicFormOverwriteWrite = async () => {
+    setBasicSheetSyncError("");
+    setBasicSheetSyncSuccess("");
+
+    if (editingBasicEntryId === null) {
+      setBasicSheetSyncError(
+        "上書き書き込みするには、先に保存済みリストの項目を編集状態で開いてください。"
+      );
+      return;
+    }
+
+    const editingEntry = savedEntries.find((entry) => entry.id === editingBasicEntryId);
+    if (!editingEntry) {
+      setBasicSheetSyncError("上書き対象の保存済みリスト項目が見つかりません。");
+      return;
+    }
+
+    const resolvedTarget = resolveBasicSheetTargetForWrite();
+    if (!resolvedTarget) {
+      return;
+    }
+
+    const targetRow = resolveSheetRowFromMap(
+      editingEntry.sheetRowsByTarget,
+      resolvedTarget.targetSheetId,
+      resolvedTarget.normalizedTargetSheetName
+    );
+
+    await writeBasicEntryToSheet(
+      createBasicEntryFromForm(),
+      resolvedTarget.targetSheetId,
+      resolvedTarget.normalizedTargetSheetName,
+      {
+        singleEntryId: editingEntry.id,
+        autoSaveToList: true,
+        targetRow,
+        preferExistingRow: true,
+      }
+    );
+  };
+
   const handleBasicWriteToSheet = async () => {
     const basicEntry = createBasicEntryFromForm();
     setBasicSheetSyncError("");
@@ -4928,6 +4974,56 @@ export function DataEntryForm() {
     );
   };
 
+  const handleResidentFormOverwriteWrite = async () => {
+    setResidentSheetSyncError("");
+    setResidentSheetSyncSuccess("");
+
+    if (residentSheetSelection !== "residentPrimary") {
+      setResidentSheetSyncError(
+        "住民票シート2では上書き書き込みできません。住民票シート1を選択してください。"
+      );
+      return;
+    }
+
+    if (editingResidentEntryId === null) {
+      setResidentSheetSyncError(
+        "上書き書き込みするには、先に保存済みリストの項目を編集状態で開いてください。"
+      );
+      return;
+    }
+
+    const editingEntry = savedResidentEntries.find(
+      (entry) => entry.id === editingResidentEntryId
+    );
+    if (!editingEntry) {
+      setResidentSheetSyncError("上書き対象の保存済みリスト項目が見つかりません。");
+      return;
+    }
+
+    const resolvedTarget = resolveResidentSheetTargetForWrite();
+    if (!resolvedTarget) {
+      return;
+    }
+
+    const targetRow = resolveSheetRowFromMap(
+      editingEntry.sheetRowsByTarget,
+      resolvedTarget.targetSheetId,
+      resolvedTarget.normalizedTargetSheetName
+    );
+
+    await writeResidentPrimaryEntryToSheet(
+      createResidentEntryFromForm(),
+      resolvedTarget.targetSheetId,
+      resolvedTarget.normalizedTargetSheetName,
+      {
+        singleEntryId: editingEntry.id,
+        autoSaveToList: true,
+        targetRow,
+        preferExistingRow: true,
+      }
+    );
+  };
+
   const handleResidentWriteToSheet = async () => {
     setResidentSheetSyncError("");
     setResidentSheetSyncSuccess("");
@@ -4964,6 +5060,63 @@ export function DataEntryForm() {
       }
     );
   };
+
+  useEffect(() => {
+    const handleGlobalWriteShortcut = (event: KeyboardEvent) => {
+      const action = getWriteShortcutAction(event);
+      if (!action) {
+        return;
+      }
+
+      event.preventDefault();
+
+      if (mode === "basic") {
+        if (action === "overwrite") {
+          void handleBasicFormOverwriteWrite();
+          return;
+        }
+
+        void handleBasicWriteToSheet();
+        return;
+      }
+
+      if (action === "overwrite") {
+        void handleResidentFormOverwriteWrite();
+        return;
+      }
+
+      void handleResidentWriteToSheet();
+    };
+
+    window.addEventListener("keydown", handleGlobalWriteShortcut);
+    return () => {
+      window.removeEventListener("keydown", handleGlobalWriteShortcut);
+    };
+  }, [
+    mode,
+    editingBasicEntryId,
+    editingResidentEntryId,
+    residentSheetSelection,
+    savedEntries,
+    savedResidentEntries,
+    settings.writeFontSize,
+    formData,
+    residentFormData,
+    basicSheetWebhookConfig,
+    residentSheetWebhookConfig,
+    selectedSheetIdByMode,
+    selectedSheetTabBySheetId,
+    activeSheetId,
+    activeSelectedSheetName,
+    effectiveBasicSheetSelection,
+    residentSecondaryEntries,
+    settings.isOperatorFixed,
+    settings.fixedOperatorName,
+    settings.isFilenameFixed,
+    settings.fixedFilename,
+    settings.isResidentSelfNameFixed,
+    settings.fixedResidentSelfName,
+  ]);
 
   const handleResidentFolderImportClick = () => {
     setResidentSheetSyncError("");
@@ -8469,19 +8622,47 @@ export function DataEntryForm() {
               />
               住所チェックを有効化する
             </label>
-            <label className="flex items-center gap-2 text-sm text-gray-700">
-              <input
-                type="checkbox"
-                checked={settings.isReloadStatePersistenceEnabled}
-                onChange={(e) =>
-                  setSettings((prev) => ({
-                    ...prev,
-                    isReloadStatePersistenceEnabled: e.target.checked,
-                  }))
-                }
-              />
-              リロード後も入力データとPDF表示を保持する
-            </label>
+            <fieldset className="space-y-2">
+              <legend className="text-sm text-gray-700">
+                リロード時の入力データとPDF表示
+              </legend>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="radio"
+                  name="reloadStateBehavior"
+                  checked={
+                    getReloadStateBehavior(settings.isReloadStatePersistenceEnabled) ===
+                    "reset"
+                  }
+                  onChange={() =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      isReloadStatePersistenceEnabled:
+                        isReloadPersistenceEnabled("reset"),
+                    }))
+                  }
+                />
+                リセットする
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="radio"
+                  name="reloadStateBehavior"
+                  checked={
+                    getReloadStateBehavior(settings.isReloadStatePersistenceEnabled) ===
+                    "keep"
+                  }
+                  onChange={() =>
+                    setSettings((prev) => ({
+                      ...prev,
+                      isReloadStatePersistenceEnabled:
+                        isReloadPersistenceEnabled("keep"),
+                    }))
+                  }
+                />
+                維持する
+              </label>
+            </fieldset>
             <label className="flex items-center gap-2 text-sm text-gray-700">
               <input
                 type="checkbox"
