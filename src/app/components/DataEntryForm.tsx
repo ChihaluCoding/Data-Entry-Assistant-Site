@@ -22,6 +22,8 @@ import {
 import { loadKenAllData, searchKenAllAddresses, type KenAllAddress } from "../lib/kenAll";
 import { findCitySuggestions, findTownSuggestions } from "../lib/addressSuggestions";
 import {
+  normalizeBanchiValueForInputAsFullWidth,
+  normalizeBanchiValueForInputAsHalfWidth,
   normalizeBanchiValueAsFullWidth,
   normalizeBanchiValueAsHalfWidth,
 } from "../lib/banchiNormalization.js";
@@ -2982,7 +2984,7 @@ export function DataEntryForm() {
     if (name === "banchi") {
       setFormData((prev) => ({
         ...prev,
-        banchi: normalizeBanchiValueAsHalfWidth(value),
+        banchi: normalizeBanchiValueForInputAsHalfWidth(value),
       }));
       return;
     }
@@ -3007,6 +3009,27 @@ export function DataEntryForm() {
       ...prev,
       [name]: value,
     }));
+  };
+
+  const handleBanchiBlur = (
+    e: React.FocusEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => {
+    const { name, value } = e.target;
+
+    if (name === "banchi") {
+      setFormData((prev) => ({
+        ...prev,
+        banchi: normalizeBanchiValueAsHalfWidth(value),
+      }));
+      return;
+    }
+
+    if (name === "departBanchi" || name === "registryBanchi") {
+      setResidentFormData((prev) => ({
+        ...prev,
+        [name]: normalizeBanchiValueAsFullWidth(value),
+      }));
+    }
   };
 
   const findNextFieldNameFromOrder = (
@@ -3441,7 +3464,7 @@ export function DataEntryForm() {
     if (name === "departBanchi" || name === "registryBanchi") {
       setResidentFormData((prev) => ({
         ...prev,
-        [name]: normalizeBanchiValueAsFullWidth(value),
+        [name]: normalizeBanchiValueForInputAsFullWidth(value),
       }));
       return;
     }
@@ -6384,6 +6407,7 @@ export function DataEntryForm() {
                       name="banchi"
                       value={formData.banchi}
                       onChange={handleChange}
+                      onBlur={handleBanchiBlur}
                       className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                       placeholder="番地を入力"
                     />
@@ -7462,6 +7486,7 @@ export function DataEntryForm() {
                         name="departBanchi"
                         value={residentFormData.departBanchi}
                         onChange={handleResidentChange}
+                        onBlur={handleBanchiBlur}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="転出番地を入力"
                       />
@@ -7947,6 +7972,7 @@ export function DataEntryForm() {
                         name="registryBanchi"
                         value={residentFormData.registryBanchi}
                         onChange={handleResidentChange}
+                        onBlur={handleBanchiBlur}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="本籍番地を入力"
                       />

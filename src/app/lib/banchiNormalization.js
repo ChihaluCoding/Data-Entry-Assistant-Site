@@ -56,11 +56,16 @@ const formatBanchiValue = (rawValue, options = {}) => {
 
   const hyphen = options.halfWidthHyphen ? "-" : "－";
 
-  return normalizedAlphaNumeric
+  const normalizedValue = normalizedAlphaNumeric
     .replace(HIRAGANA_BANCHI_SEPARATOR_PATTERN, hyphen)
     .replace(ANY_KANJI_PATTERN, hyphen)
-    .replace(DASH_VARIANT_PATTERN, hyphen)
-    .replace(new RegExp(`^${hyphen}+|${hyphen}+$`, "g"), "");
+    .replace(DASH_VARIANT_PATTERN, hyphen);
+
+  if (options.preserveEdgeHyphen) {
+    return normalizedValue;
+  }
+
+  return normalizedValue.replace(new RegExp(`^${hyphen}+|${hyphen}+$`, "g"), "");
 };
 
 export function normalizeBanchiValueAsHalfWidth(rawValue) {
@@ -74,5 +79,21 @@ export function normalizeBanchiValueAsFullWidth(rawValue) {
   return formatBanchiValue(rawValue, {
     halfWidthAlphaNumeric: false,
     halfWidthHyphen: false,
+  });
+}
+
+export function normalizeBanchiValueForInputAsHalfWidth(rawValue) {
+  return formatBanchiValue(rawValue, {
+    halfWidthAlphaNumeric: true,
+    halfWidthHyphen: false,
+    preserveEdgeHyphen: true,
+  });
+}
+
+export function normalizeBanchiValueForInputAsFullWidth(rawValue) {
+  return formatBanchiValue(rawValue, {
+    halfWidthAlphaNumeric: false,
+    halfWidthHyphen: false,
+    preserveEdgeHyphen: true,
   });
 }

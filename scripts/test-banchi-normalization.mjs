@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  normalizeBanchiValueForInputAsFullWidth,
+  normalizeBanchiValueForInputAsHalfWidth,
   normalizeBanchiValueAsFullWidth,
   normalizeBanchiValueAsHalfWidth,
 } from "../src/app/lib/banchiNormalization.js";
@@ -38,4 +40,11 @@ test("基本モード向け番地は英数字を半角維持しつつ漢字を�
   assert.equal(normalizeBanchiValueAsHalfWidth("3丁目42番19－50"), "3－42－19－50");
   assert.equal(normalizeBanchiValueAsHalfWidth("3ちょうめ42ばん19ごう"), "3－42－19");
   assert.equal(normalizeBanchiValueAsHalfWidth("3甲42乙19丙50"), "3－42－19－50");
+});
+
+test("番地入力中は単独や末尾のハイフンを保持する", () => {
+  assert.equal(normalizeBanchiValueForInputAsHalfWidth("-"), "－");
+  assert.equal(normalizeBanchiValueForInputAsHalfWidth("12-"), "12－");
+  assert.equal(normalizeBanchiValueForInputAsFullWidth("-"), "－");
+  assert.equal(normalizeBanchiValueForInputAsFullWidth("１２-"), "１２－");
 });
