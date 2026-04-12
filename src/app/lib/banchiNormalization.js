@@ -35,6 +35,10 @@ const toHalfWidthAlphabet = (rawValue) => {
   );
 };
 
+const ANY_KANJI_PATTERN = /[\u3400-\u4DBF\u4E00-\u9FFF々〆ヵヶ]/g;
+const HIRAGANA_BANCHI_SEPARATOR_PATTERN = /(ちょうめ|ばんち|ばん|ごう)/g;
+const DASH_VARIANT_PATTERN = /[-‐‑‒–—―ｰー－]+/g;
+
 const formatBanchiValue = (rawValue, options = {}) => {
   const trimmed = rawValue.trim();
   if (!trimmed) {
@@ -53,8 +57,9 @@ const formatBanchiValue = (rawValue, options = {}) => {
   const hyphen = options.halfWidthHyphen ? "-" : "－";
 
   return normalizedAlphaNumeric
-    .replace(/(丁目|番地|番|号|ちょうめ|ばんち|ばん|ごう)/g, hyphen)
-    .replace(/[-‐‑‒–—―ｰー－]+/g, hyphen)
+    .replace(HIRAGANA_BANCHI_SEPARATOR_PATTERN, hyphen)
+    .replace(ANY_KANJI_PATTERN, hyphen)
+    .replace(DASH_VARIANT_PATTERN, hyphen)
     .replace(new RegExp(`^${hyphen}+|${hyphen}+$`, "g"), "");
 };
 
