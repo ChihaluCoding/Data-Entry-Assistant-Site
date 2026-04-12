@@ -1039,7 +1039,7 @@ const toFullWidthAlphabet = (rawValue: string): string => {
 };
 
 const normalizeBuildingValue = (rawValue: string): string => {
-  return toFullWidthAlphabet(toHalfWidthDigits(rawValue));
+  return toFullWidthAlphabet(rawValue);
 };
 
 const COMPANY_SHORTCUT_MAP: Record<string, string> = {

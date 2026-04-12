@@ -1,7 +1,7 @@
 {
   "name": "@figma/my-make-file",
   "private": true,
-  "version": "0.4.50",
+  "version": "0.4.51",
   "type": "module",
   "scripts": {
     "generate:ken-all-index": "node scripts/build-ken-all-index.mjs",
@@ -11,6 +11,7 @@
     "build": "vite build",
     "dev": "vite",
     "test:area-field-value": "node --test scripts/test-area-field-value.mjs",
+    "test:building-normalization": "node --test scripts/test-building-normalization.mjs",
     "test:ime-navigation-guard": "node --test scripts/test-ime-navigation-guard.mjs",
     "test:banchi-normalization": "node --test scripts/test-banchi-normalization.mjs",
     "test:no-selected-sheet-id-by-mode-reference": "node --test scripts/test-no-selected-sheet-id-by-mode-reference.mjs",
