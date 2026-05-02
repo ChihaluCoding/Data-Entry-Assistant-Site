@@ -49,6 +49,7 @@ import {
   copyDepartValueToRegistryField,
   isResidentEditableNameField,
   joinWithFullWidthSpace,
+  syncRegistrySurnameWithDepartName,
   syncCheckedRegistryFieldsWithDepart,
   toFullWidthSpace,
 } from "../lib/residentFormHelpers.js";
@@ -1733,6 +1734,8 @@ export function DataEntryForm() {
     useState<ResidentRegistrySyncFields>({
       ...DEFAULT_RESIDENT_REGISTRY_SYNC_FIELDS,
     });
+  const [isRegistrySurnameSyncEnabled, setIsRegistrySurnameSyncEnabled] =
+    useState(false);
 
   const [pdfFile, setPdfFile] = useState<string | null>(null);
   const [savedEntries, setSavedEntries] = useState<SavedEntry[]>([]);
@@ -3280,7 +3283,8 @@ export function DataEntryForm() {
       } as ResidentFormData;
       return syncCheckedRegistryFieldsWithDepart(
         next,
-        residentRegistrySyncFields
+        residentRegistrySyncFields,
+        { isRegistrySurnameSyncEnabled }
       ) as ResidentFormData;
     });
   };
@@ -3292,7 +3296,8 @@ export function DataEntryForm() {
       const next = updater(prev);
       return syncCheckedRegistryFieldsWithDepart(
         next,
-        residentRegistrySyncFields
+        residentRegistrySyncFields,
+        { isRegistrySurnameSyncEnabled }
       ) as ResidentFormData;
     });
   };
@@ -3306,12 +3311,32 @@ export function DataEntryForm() {
       [registryFieldName]: checked,
     }));
 
+    if (registryFieldName === "registryName" && checked) {
+      setIsRegistrySurnameSyncEnabled(false);
+    }
+
     if (!checked) {
       return;
     }
 
     setResidentFormData((prev) =>
       copyDepartValueToRegistryField(prev, registryFieldName) as ResidentFormData
+    );
+  };
+
+  const handleRegistrySurnameSyncToggle = (checked: boolean) => {
+    setIsRegistrySurnameSyncEnabled(checked);
+
+    if (!checked) {
+      return;
+    }
+
+    setResidentRegistrySyncFields((prev) => ({
+      ...prev,
+      registryName: false,
+    }));
+    setResidentFormData((prev) =>
+      syncRegistrySurnameWithDepartName(prev) as ResidentFormData
     );
   };
 
@@ -5442,6 +5467,7 @@ export function DataEntryForm() {
       setResidentRegistrySyncFields({
         ...DEFAULT_RESIDENT_REGISTRY_SYNC_FIELDS,
       });
+      setIsRegistrySurnameSyncEnabled(false);
       setResidentFormData({
         ...DEFAULT_RESIDENT_FORM_DATA,
         residentSelfName: settings.isResidentSelfNameFixed
@@ -5535,6 +5561,7 @@ export function DataEntryForm() {
     setResidentRegistrySyncFields({
       ...DEFAULT_RESIDENT_REGISTRY_SYNC_FIELDS,
     });
+    setIsRegistrySurnameSyncEnabled(false);
     setResidentFormData({
       residentSelfName: settings.isResidentSelfNameFixed
         ? settings.fixedResidentSelfName
@@ -5675,6 +5702,18 @@ export function DataEntryForm() {
         className="h-3.5 w-3.5 rounded border-green-300 text-green-600 focus:ring-green-500"
       />
       転出と同じ
+    </label>
+  );
+
+  const renderRegistrySurnameSyncCheckbox = () => (
+    <label className="inline-flex items-center gap-1.5 text-xs text-green-700">
+      <input
+        type="checkbox"
+        checked={isRegistrySurnameSyncEnabled}
+        onChange={(e) => handleRegistrySurnameSyncToggle(e.target.checked)}
+        className="h-3.5 w-3.5 rounded border-green-300 text-green-600 focus:ring-green-500"
+      />
+      苗字だけ同じ
     </label>
   );
 
@@ -7586,7 +7625,10 @@ export function DataEntryForm() {
                     <div>
                       <div className="mb-1.5 flex items-center justify-between gap-2">
                         <label className="block text-sm text-gray-700">名前</label>
-                        {renderRegistrySyncCheckbox("registryName")}
+                        <div className="flex flex-wrap justify-end gap-x-3 gap-y-1">
+                          {renderRegistrySyncCheckbox("registryName")}
+                          {renderRegistrySurnameSyncCheckbox()}
+                        </div>
                       </div>
                       <input
                         type="text"

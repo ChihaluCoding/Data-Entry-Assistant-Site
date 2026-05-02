@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 
 import {
   copyDepartValueToRegistryField,
+  getGivenNameFromResidentName,
+  getSurnameFromResidentName,
   isResidentEditableNameField,
+  syncRegistrySurnameWithDepartName,
   syncCheckedRegistryFieldsWithDepart,
   toFullWidthSpace,
 } from "../src/app/lib/residentFormHelpers.js";
@@ -49,6 +52,45 @@ test("本籍同期チェックONの欄は転出欄の値へ追従する", () => 
   assert.equal(result.registryPrefecture, "東京都");
 });
 
+test("本籍名前の苗字だけ同期は転出名の全角空白より前を苗字として使う", () => {
+  const formData = createResidentFormData({
+    departName: "山田　太郎",
+    registryName: "田中　花子",
+  });
+
+  const result = syncRegistrySurnameWithDepartName(formData);
+
+  assert.equal(result.registryName, "山田　花子");
+});
+
+test("本籍名前の苗字だけ同期ON中は転出名の苗字変更だけが追従する", () => {
+  const formData = createResidentFormData({
+    departName: "佐藤　太郎",
+    registryName: "山田　花子",
+  });
+
+  const result = syncCheckedRegistryFieldsWithDepart(formData, {}, {
+    isRegistrySurnameSyncEnabled: true,
+  });
+
+  assert.equal(result.registryName, "佐藤　花子");
+});
+
+test("本籍名前全体同期がONの場合は苗字だけ同期より全体同期を優先する", () => {
+  const formData = createResidentFormData({
+    departName: "佐藤　太郎",
+    registryName: "山田　花子",
+  });
+
+  const result = syncCheckedRegistryFieldsWithDepart(
+    formData,
+    { registryName: true },
+    { isRegistrySurnameSyncEnabled: true }
+  );
+
+  assert.equal(result.registryName, "佐藤　太郎");
+});
+
 test("本籍同期チェックOFFの欄と未定義欄は変更しない", () => {
   const formData = createResidentFormData({
     departCity: "新宿区",
@@ -91,4 +133,9 @@ test("自分の名前以外の住民票名前欄は半角空白を全角空白�
   assert.equal(isResidentEditableNameField("registryName"), true);
   assert.equal(isResidentEditableNameField("residentSelfName"), false);
   assert.equal(toFullWidthSpace("山田 太郎"), "山田　太郎");
+});
+
+test("全角空白がない名前は名前全体を苗字として判定し、名は空として扱う", () => {
+  assert.equal(getSurnameFromResidentName("山田太郎"), "山田太郎");
+  assert.equal(getGivenNameFromResidentName("山田太郎"), "");
 });

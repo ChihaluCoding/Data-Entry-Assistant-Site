@@ -24,6 +24,38 @@ export function isResidentEditableNameField(fieldName) {
   return fieldName === "departName" || fieldName === "registryName";
 }
 
+export function getSurnameFromResidentName(name) {
+  const normalizedName = toFullWidthSpace(name);
+  const separatorIndex = normalizedName.indexOf(FULL_WIDTH_SPACE);
+  if (separatorIndex < 0) {
+    return normalizedName;
+  }
+
+  return normalizedName.slice(0, separatorIndex);
+}
+
+export function getGivenNameFromResidentName(name) {
+  const normalizedName = toFullWidthSpace(name);
+  const separatorIndex = normalizedName.indexOf(FULL_WIDTH_SPACE);
+  if (separatorIndex < 0) {
+    return "";
+  }
+
+  return normalizedName.slice(separatorIndex + FULL_WIDTH_SPACE.length);
+}
+
+export function syncRegistrySurnameWithDepartName(formData) {
+  const departSurname = getSurnameFromResidentName(formData.departName ?? "");
+  const registryGivenName = getGivenNameFromResidentName(
+    formData.registryName ?? ""
+  );
+
+  return {
+    ...formData,
+    registryName: joinWithFullWidthSpace([departSurname, registryGivenName]),
+  };
+}
+
 export function copyDepartValueToRegistryField(formData, registryFieldName) {
   const pair = RESIDENT_REGISTRY_SYNC_FIELD_PAIRS.find(
     ([, registryField]) => registryField === registryFieldName
@@ -39,8 +71,12 @@ export function copyDepartValueToRegistryField(formData, registryFieldName) {
   };
 }
 
-export function syncCheckedRegistryFieldsWithDepart(formData, checkedFields) {
-  return RESIDENT_REGISTRY_SYNC_FIELD_PAIRS.reduce(
+export function syncCheckedRegistryFieldsWithDepart(
+  formData,
+  checkedFields,
+  options = {}
+) {
+  const syncedFormData = RESIDENT_REGISTRY_SYNC_FIELD_PAIRS.reduce(
     (nextFormData, [departField, registryField]) => {
       if (!checkedFields[registryField]) {
         return nextFormData;
@@ -53,4 +89,13 @@ export function syncCheckedRegistryFieldsWithDepart(formData, checkedFields) {
     },
     formData
   );
+
+  if (
+    options.isRegistrySurnameSyncEnabled &&
+    !checkedFields.registryName
+  ) {
+    return syncRegistrySurnameWithDepartName(syncedFormData);
+  }
+
+  return syncedFormData;
 }
