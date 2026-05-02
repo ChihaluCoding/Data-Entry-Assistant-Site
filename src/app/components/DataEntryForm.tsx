@@ -44,6 +44,15 @@ import {
   normalizeSheetUrl,
 } from "../lib/googleSheet";
 import {
+  FULL_WIDTH_SPACE,
+  RESIDENT_REGISTRY_SYNC_FIELD_PAIRS,
+  copyDepartValueToRegistryField,
+  isResidentEditableNameField,
+  joinWithFullWidthSpace,
+  syncCheckedRegistryFieldsWithDepart,
+  toFullWidthSpace,
+} from "../lib/residentFormHelpers.js";
+import {
   checkAddressWithLocalInference,
   type LocalAddressCandidate,
   type LocalAddressCheckResult,
@@ -93,6 +102,16 @@ interface ResidentFormData {
   registryBuilding: string;
   residentAlias: string;
 }
+
+type ResidentRegistrySyncFields = Record<string, boolean>;
+
+const DEFAULT_RESIDENT_REGISTRY_SYNC_FIELDS: ResidentRegistrySyncFields =
+  Object.fromEntries(
+    RESIDENT_REGISTRY_SYNC_FIELD_PAIRS.map(([, registryField]) => [
+      registryField,
+      false,
+    ])
+  );
 
 const DEFAULT_FORM_DATA: FormData = {
   operator: "",
@@ -165,18 +184,9 @@ interface AddressCheckViewResult extends LocalAddressCheckResult {
   referenceCandidateCount: number;
 }
 
-const FULL_WIDTH_SPACE = "　";
 const SUGGESTION_ITEM_HEIGHT = 36;
 const SUGGESTION_PANEL_MAX_HEIGHT = 288;
 const SUGGESTION_OVERSCAN = 6;
-
-const joinWithFullWidthSpace = (parts: string[]) => {
-  return parts.filter(Boolean).join(FULL_WIDTH_SPACE);
-};
-
-const toFullWidthSpace = (value: string): string => {
-  return value.replace(/ /g, FULL_WIDTH_SPACE);
-};
 
 const moveArrayItem = <T,>(items: T[], fromIndex: number, toIndex: number): T[] => {
   if (
@@ -1719,6 +1729,10 @@ export function DataEntryForm() {
   const [residentFormData, setResidentFormData] = useState<ResidentFormData>({
     ...DEFAULT_RESIDENT_FORM_DATA,
   });
+  const [residentRegistrySyncFields, setResidentRegistrySyncFields] =
+    useState<ResidentRegistrySyncFields>({
+      ...DEFAULT_RESIDENT_REGISTRY_SYNC_FIELDS,
+    });
 
   const [pdfFile, setPdfFile] = useState<string | null>(null);
   const [savedEntries, setSavedEntries] = useState<SavedEntry[]>([]);
@@ -3025,10 +3039,7 @@ export function DataEntryForm() {
     }
 
     if (name === "departBanchi" || name === "registryBanchi") {
-      setResidentFormData((prev) => ({
-        ...prev,
-        [name]: normalizeBanchiValueAsFullWidth(value),
-      }));
+      updateResidentFormField(name, normalizeBanchiValueAsFullWidth(value));
     }
   };
 
@@ -3261,6 +3272,49 @@ export function DataEntryForm() {
     }));
   };
 
+  const updateResidentFormField = (fieldName: string, fieldValue: string) => {
+    setResidentFormData((prev) => {
+      const next = {
+        ...prev,
+        [fieldName]: fieldValue,
+      } as ResidentFormData;
+      return syncCheckedRegistryFieldsWithDepart(
+        next,
+        residentRegistrySyncFields
+      ) as ResidentFormData;
+    });
+  };
+
+  const updateResidentFormData = (
+    updater: (prev: ResidentFormData) => ResidentFormData
+  ) => {
+    setResidentFormData((prev) => {
+      const next = updater(prev);
+      return syncCheckedRegistryFieldsWithDepart(
+        next,
+        residentRegistrySyncFields
+      ) as ResidentFormData;
+    });
+  };
+
+  const handleResidentRegistrySyncToggle = (
+    registryFieldName: string,
+    checked: boolean
+  ) => {
+    setResidentRegistrySyncFields((prev) => ({
+      ...prev,
+      [registryFieldName]: checked,
+    }));
+
+    if (!checked) {
+      return;
+    }
+
+    setResidentFormData((prev) =>
+      copyDepartValueToRegistryField(prev, registryFieldName) as ResidentFormData
+    );
+  };
+
   const applyAddressSuggestion = (
     address: KenAllAddress,
     target: AddressSuggestionTarget = "basic"
@@ -3279,7 +3333,7 @@ export function DataEntryForm() {
       const prefectureField = getResidentAddressFieldName(target, "prefecture");
       const cityField = getResidentAddressFieldName(target, "city");
       const townField = getResidentAddressFieldName(target, "town");
-      setResidentFormData((prev) => ({
+      updateResidentFormData((prev) => ({
         ...prev,
         [prefectureField]: address.prefecture,
         [cityField]: address.city,
@@ -3308,7 +3362,7 @@ export function DataEntryForm() {
     } else {
       resetResidentAddressCheckState(target);
       const prefectureField = getResidentAddressFieldName(target, "prefecture");
-      setResidentFormData((prev) => ({
+      updateResidentFormData((prev) => ({
         ...prev,
         [prefectureField]: prefecture,
       }));
@@ -3333,7 +3387,7 @@ export function DataEntryForm() {
       resetResidentAddressCheckState(target);
       const prefectureField = getResidentAddressFieldName(target, "prefecture");
       const cityField = getResidentAddressFieldName(target, "city");
-      setResidentFormData((prev) => ({
+      updateResidentFormData((prev) => ({
         ...prev,
         [prefectureField]: address.prefecture,
         [cityField]: address.city,
@@ -3411,6 +3465,9 @@ export function DataEntryForm() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
+    const normalizedValue = isResidentEditableNameField(name)
+      ? toFullWidthSpace(value)
+      : value;
 
     const residentSection = getResidentSectionFromFieldName(name);
     if (residentSection) {
@@ -3441,39 +3498,33 @@ export function DataEntryForm() {
     }
 
     if (name === "departTown" || name === "registryTown") {
-      const sanitizedTown = sanitizeTownValue(value);
+      const sanitizedTown = sanitizeTownValue(normalizedValue);
       setActiveSuggestionIndex((prev) => ({ ...prev, town: -1 }));
       setIsTownSuggestionVisible(sanitizedTown.trim().length > 0);
-      setResidentFormData((prev) => ({
-        ...prev,
-        [name]: sanitizedTown,
-      }));
+      updateResidentFormField(name, sanitizedTown);
       return;
     }
 
     if (name === "departPrefecture" || name === "registryPrefecture") {
       setActiveSuggestionIndex((prev) => ({ ...prev, prefecture: -1 }));
-      setIsPrefectureSuggestionVisible(value.trim().length > 0);
+      setIsPrefectureSuggestionVisible(normalizedValue.trim().length > 0);
     }
 
     if (name === "departCity" || name === "registryCity") {
       setActiveSuggestionIndex((prev) => ({ ...prev, city: -1 }));
-      setIsCitySuggestionVisible(value.trim().length > 0);
+      setIsCitySuggestionVisible(normalizedValue.trim().length > 0);
     }
 
     if (name === "departBanchi" || name === "registryBanchi") {
-      setResidentFormData((prev) => ({
-        ...prev,
-        [name]: normalizeBanchiValueForInputAsFullWidth(value),
-      }));
+      updateResidentFormField(
+        name,
+        normalizeBanchiValueForInputAsFullWidth(normalizedValue)
+      );
       return;
     }
 
     if (name === "departBuilding" || name === "registryBuilding") {
-      setResidentFormData((prev) => ({
-        ...prev,
-        [name]: normalizeBuildingValue(value),
-      }));
+      updateResidentFormField(name, normalizeBuildingValue(normalizedValue));
       return;
     }
 
@@ -3485,21 +3536,18 @@ export function DataEntryForm() {
       name === "registryAza" ||
       name === "registryKoaza"
     ) {
-      setResidentFormData((prev) => ({
-        ...prev,
-        [name]: resolveAreaFieldValue(
+      updateResidentFormField(
+        name,
+        resolveAreaFieldValue(
           name,
-          value,
+          normalizedValue,
           isNativeImeComposing(e.nativeEvent)
-        ),
-      }));
+        )
+      );
       return;
     }
 
-    setResidentFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    updateResidentFormField(name, normalizedValue);
   };
 
   const handleResidentAreaCompositionEnd = (
@@ -3517,10 +3565,7 @@ export function DataEntryForm() {
       return;
     }
 
-    setResidentFormData((prev) => ({
-      ...prev,
-      [name]: formatAreaFieldValue(name, value),
-    }));
+    updateResidentFormField(name, formatAreaFieldValue(name, value));
   };
 
   const handleActiveSheetTabSelectionChange = (sheetName: string) => {
@@ -3535,8 +3580,11 @@ export function DataEntryForm() {
   };
 
   const handleResidentSecondaryNameChange = (id: number, name: string) => {
+    const normalizedName = toFullWidthSpace(name);
     setResidentSecondaryEntries((prev) =>
-      prev.map((entry) => (entry.id === id ? { ...entry, name } : entry))
+      prev.map((entry) =>
+        entry.id === id ? { ...entry, name: normalizedName } : entry
+      )
     );
   };
 
@@ -4052,7 +4100,7 @@ export function DataEntryForm() {
     }
 
     if (section === "depart") {
-      setResidentFormData((prev) => ({
+      updateResidentFormData((prev) => ({
         ...prev,
         departPrefecture: correction.prefecture || prev.departPrefecture,
         departCity: correction.city || prev.departCity,
@@ -5391,6 +5439,9 @@ export function DataEntryForm() {
       setIsBasicMapLoaded(false);
       setIsBasicMapResolving(false);
     } else {
+      setResidentRegistrySyncFields({
+        ...DEFAULT_RESIDENT_REGISTRY_SYNC_FIELDS,
+      });
       setResidentFormData({
         ...DEFAULT_RESIDENT_FORM_DATA,
         residentSelfName: settings.isResidentSelfNameFixed
@@ -5481,6 +5532,9 @@ export function DataEntryForm() {
   };
 
   const handleEditResidentEntry = (entry: SavedResidentEntry) => {
+    setResidentRegistrySyncFields({
+      ...DEFAULT_RESIDENT_REGISTRY_SYNC_FIELDS,
+    });
     setResidentFormData({
       residentSelfName: settings.isResidentSelfNameFixed
         ? settings.fixedResidentSelfName
@@ -5609,6 +5663,20 @@ export function DataEntryForm() {
       }
     }
   };
+
+  const renderRegistrySyncCheckbox = (registryFieldName: string) => (
+    <label className="inline-flex items-center gap-1.5 text-xs text-green-700">
+      <input
+        type="checkbox"
+        checked={Boolean(residentRegistrySyncFields[registryFieldName])}
+        onChange={(e) =>
+          handleResidentRegistrySyncToggle(registryFieldName, e.target.checked)
+        }
+        className="h-3.5 w-3.5 rounded border-green-300 text-green-600 focus:ring-green-500"
+      />
+      転出と同じ
+    </label>
+  );
 
   return (
     <div className="data-entry-form h-screen flex bg-gray-50">
@@ -7516,9 +7584,10 @@ export function DataEntryForm() {
                     
                     {/* 本籍地名 */}
                     <div>
-                      <label className="block text-sm text-gray-700 mb-1.5">
-                        名前
-                      </label>
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <label className="block text-sm text-gray-700">名前</label>
+                        {renderRegistrySyncCheckbox("registryName")}
+                      </div>
                       <input
                         type="text"
                         name="registryName"
@@ -7545,9 +7614,10 @@ export function DataEntryForm() {
                         )
                       }
                     >
-                      <label className="block text-sm text-gray-700 mb-1.5">
-                        都道府県
-                      </label>
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <label className="block text-sm text-gray-700">都道府県</label>
+                        {renderRegistrySyncCheckbox("registryPrefecture")}
+                      </div>
                       <input
                         type="text"
                         name="registryPrefecture"
@@ -7638,9 +7708,10 @@ export function DataEntryForm() {
                         handleSuggestionAreaBlur(e, setIsCitySuggestionVisible, "city")
                       }
                     >
-                      <label className="block text-sm text-gray-700 mb-1.5">
-                        市区町村
-                      </label>
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <label className="block text-sm text-gray-700">市区町村</label>
+                        {renderRegistrySyncCheckbox("registryCity")}
+                      </div>
                       <input
                         type="text"
                         name="registryCity"
@@ -7731,9 +7802,10 @@ export function DataEntryForm() {
                         handleSuggestionAreaBlur(e, setIsTownSuggestionVisible, "town")
                       }
                     >
-                      <label className="block text-sm text-gray-700 mb-1.5">
-                        町域
-                      </label>
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <label className="block text-sm text-gray-700">町域</label>
+                        {renderRegistrySyncCheckbox("registryTown")}
+                      </div>
                       <input
                         type="text"
                         name="registryTown"
@@ -7916,9 +7988,10 @@ export function DataEntryForm() {
 
                     {/* 本籍大字 */}
                     <div>
-                      <label className="block text-sm text-gray-700 mb-1.5">
-                        大字
-                      </label>
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <label className="block text-sm text-gray-700">大字</label>
+                        {renderRegistrySyncCheckbox("registryOoaza")}
+                      </div>
                       <input
                         type="text"
                         name="registryOoaza"
@@ -7932,9 +8005,10 @@ export function DataEntryForm() {
 
                     {/* 本籍字 */}
                     <div>
-                      <label className="block text-sm text-gray-700 mb-1.5">
-                        字
-                      </label>
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <label className="block text-sm text-gray-700">字</label>
+                        {renderRegistrySyncCheckbox("registryAza")}
+                      </div>
                       <input
                         type="text"
                         name="registryAza"
@@ -7948,9 +8022,10 @@ export function DataEntryForm() {
 
                     {/* 本籍小字 */}
                     <div>
-                      <label className="block text-sm text-gray-700 mb-1.5">
-                        小字
-                      </label>
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <label className="block text-sm text-gray-700">小字</label>
+                        {renderRegistrySyncCheckbox("registryKoaza")}
+                      </div>
                       <input
                         type="text"
                         name="registryKoaza"
@@ -7964,9 +8039,10 @@ export function DataEntryForm() {
 
                     {/* 本籍番地 */}
                     <div>
-                      <label className="block text-sm text-gray-700 mb-1.5">
-                        番地
-                      </label>
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <label className="block text-sm text-gray-700">番地</label>
+                        {renderRegistrySyncCheckbox("registryBanchi")}
+                      </div>
                       <input
                         type="text"
                         name="registryBanchi"
@@ -7980,9 +8056,10 @@ export function DataEntryForm() {
 
                     {/* 本籍建物名 */}
                     <div>
-                      <label className="block text-sm text-gray-700 mb-1.5">
-                        建物名
-                      </label>
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <label className="block text-sm text-gray-700">建物名</label>
+                        {renderRegistrySyncCheckbox("registryBuilding")}
+                      </div>
                       <input
                         type="text"
                         name="registryBuilding"

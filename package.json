@@ -1,7 +1,7 @@
 {
   "name": "@figma/my-make-file",
   "private": true,
-  "version": "0.4.51",
+  "version": "0.4.52",
   "type": "module",
   "scripts": {
     "generate:ken-all-index": "node scripts/build-ken-all-index.mjs",
@@ -16,6 +16,7 @@
     "test:banchi-normalization": "node --test scripts/test-banchi-normalization.mjs",
     "test:no-selected-sheet-id-by-mode-reference": "node --test scripts/test-no-selected-sheet-id-by-mode-reference.mjs",
     "test:resident-folder-row-selection": "node --test scripts/test-resident-folder-row-selection.mjs",
+    "test:resident-form-helpers": "node --test scripts/test-resident-form-helpers.mjs",
     "test:write-shortcut": "node --test scripts/test-write-shortcut.mjs",
     "test:reload-state-behavior": "node --test scripts/test-reload-state-behavior.mjs"
   },
