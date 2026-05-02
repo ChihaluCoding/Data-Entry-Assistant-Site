@@ -49,6 +49,7 @@ import {
   copyDepartValueToRegistryField,
   isResidentEditableNameField,
   joinWithFullWidthSpace,
+  normalizeRegistryNameInputWithSyncedSurname,
   syncRegistrySurnameWithDepartName,
   syncCheckedRegistryFieldsWithDepart,
   toFullWidthSpace,
@@ -3490,9 +3491,15 @@ export function DataEntryForm() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
-    const normalizedValue = isResidentEditableNameField(name)
-      ? toFullWidthSpace(value)
-      : value;
+    const normalizedValue =
+      name === "registryName" && isRegistrySurnameSyncEnabled
+        ? normalizeRegistryNameInputWithSyncedSurname(
+            value,
+            residentFormData.departName
+          )
+        : isResidentEditableNameField(name)
+          ? toFullWidthSpace(value)
+          : value;
 
     const residentSection = getResidentSectionFromFieldName(name);
     if (residentSection) {

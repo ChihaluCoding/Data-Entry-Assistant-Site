@@ -56,6 +56,33 @@ export function syncRegistrySurnameWithDepartName(formData) {
   };
 }
 
+export function normalizeRegistryNameInputWithSyncedSurname(inputName, departName) {
+  const normalizedInputName = toFullWidthSpace(inputName);
+  const departSurname = getSurnameFromResidentName(departName ?? "");
+
+  if (!departSurname) {
+    return normalizedInputName;
+  }
+
+  if (normalizedInputName === departSurname) {
+    return departSurname;
+  }
+
+  const prefixedSeparator = `${departSurname}${FULL_WIDTH_SPACE}`;
+  if (normalizedInputName.startsWith(prefixedSeparator)) {
+    return normalizedInputName;
+  }
+
+  if (normalizedInputName.startsWith(departSurname)) {
+    const typedGivenName = normalizedInputName.slice(departSurname.length);
+    return joinWithFullWidthSpace([departSurname, typedGivenName]);
+  }
+
+  const typedGivenName =
+    getGivenNameFromResidentName(normalizedInputName) || normalizedInputName;
+  return joinWithFullWidthSpace([departSurname, typedGivenName]);
+}
+
 export function copyDepartValueToRegistryField(formData, registryFieldName) {
   const pair = RESIDENT_REGISTRY_SYNC_FIELD_PAIRS.find(
     ([, registryField]) => registryField === registryFieldName

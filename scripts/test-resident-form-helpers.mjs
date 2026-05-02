@@ -6,6 +6,7 @@ import {
   getGivenNameFromResidentName,
   getSurnameFromResidentName,
   isResidentEditableNameField,
+  normalizeRegistryNameInputWithSyncedSurname,
   syncRegistrySurnameWithDepartName,
   syncCheckedRegistryFieldsWithDepart,
   toFullWidthSpace,
@@ -74,6 +75,27 @@ test("本籍名前の苗字だけ同期ON中は転出名の苗字変更だけが
   });
 
   assert.equal(result.registryName, "佐藤　花子");
+});
+
+test("本籍名前の苗字だけ同期ON中は名だけの入力を転出苗字付きで保持する", () => {
+  assert.equal(
+    normalizeRegistryNameInputWithSyncedSurname("花子", "山田　太郎"),
+    "山田　花子"
+  );
+});
+
+test("本籍名前の苗字だけ同期ON中は転出苗字に続けて入力した名も保持する", () => {
+  assert.equal(
+    normalizeRegistryNameInputWithSyncedSurname("山田花子", "山田　太郎"),
+    "山田　花子"
+  );
+});
+
+test("本籍名前の苗字だけ同期ON中でも全角空白付きの手入力名を保持する", () => {
+  assert.equal(
+    normalizeRegistryNameInputWithSyncedSurname("田中　花子", "山田　太郎"),
+    "山田　花子"
+  );
 });
 
 test("本籍名前全体同期がONの場合は苗字だけ同期より全体同期を優先する", () => {
