@@ -13,11 +13,6 @@ import {
   ChevronUp,
   Settings,
   X,
-  Timer,
-  Play,
-  Pause,
-  RotateCcw,
-  SkipForward,
 } from "lucide-react";
 import { loadKenAllData, searchKenAllAddresses, type KenAllAddress } from "../lib/kenAll";
 import { findCitySuggestions, findTownSuggestions } from "../lib/addressSuggestions";
@@ -60,7 +55,6 @@ import {
   type LocalAddressCandidate,
   type LocalAddressCheckResult,
 } from "../lib/localAddressAi";
-import { extractPdfTextWithOptionalOcr } from "../lib/pdfTextRecognition.js";
 
 interface FormData {
   operator: string;
@@ -257,7 +251,6 @@ const resolveSheetRowFromMap = (
 
 type SuggestionType = "postal" | "prefecture" | "city" | "town";
 type ResidentSection = "depart" | "registry";
-type PdfTextRecognitionSource = "embedded" | "ocr" | "none";
 type AddressSuggestionTarget = "basic" | ResidentSection;
 type AddressSuggestionType = Exclude<SuggestionType, "postal">;
 
@@ -333,16 +326,11 @@ const RESIDENT_SECONDARY_SHEET_START_ROW = 3;
 const DEFAULT_SHEET_WRITE_FONT_SIZE = 10;
 const MIN_SHEET_WRITE_FONT_SIZE = 6;
 const MAX_SHEET_WRITE_FONT_SIZE = 72;
-const DEFAULT_POMODORO_FOCUS_MINUTES = 25;
-const DEFAULT_POMODORO_BREAK_MINUTES = 5;
-const MIN_POMODORO_MINUTES = 1;
-const MAX_POMODORO_MINUTES = 120;
 const KANJI_ME_EMBED_URL = "https://kanji.me/";
 type BasicSheetSelection = "basicPrimary" | "basicSecondary";
 type ResidentSheetSelection = "residentPrimary" | "residentSecondary";
 type BasicWriteSkipFieldName = "postalCode" | "prefecture" | "city" | "town";
 type BasicWriteSkipFields = Record<BasicWriteSkipFieldName, boolean>;
-type PomodoroPhase = "focus" | "break";
 
 const DEFAULT_BASIC_WRITE_SKIP_FIELDS: BasicWriteSkipFields = {
   postalCode: false,
@@ -351,16 +339,6 @@ const DEFAULT_BASIC_WRITE_SKIP_FIELDS: BasicWriteSkipFields = {
   town: false,
 };
 
-interface PomodoroPersistedState {
-  phase: PomodoroPhase;
-  secondsRemaining: number;
-  focusMinutes: number;
-  breakMinutes: number;
-  isRunning: boolean;
-  completedFocusSessions: number;
-  isCollapsed: boolean;
-}
-
 interface ReloadPersistedState {
   mode: "basic" | "resident";
   viewMode: "pdf" | "sheet" | "kanji";
@@ -368,7 +346,6 @@ interface ReloadPersistedState {
   isPhoneThreeThreeFourFormatEnabled: boolean;
   formData: FormData;
   basicWriteSkipFields: BasicWriteSkipFields;
-  pomodoro: PomodoroPersistedState;
   residentFormData: ResidentFormData;
   savedEntries: SavedEntry[];
   savedResidentEntries: SavedResidentEntry[];
@@ -392,80 +369,6 @@ const normalizeBasicWriteSkipFieldsFromUnknown = (value: unknown): BasicWriteSki
     prefecture: record.prefecture === true,
     city: record.city === true,
     town: record.town === true,
-  };
-};
-
-const normalizePomodoroMinutes = (value: unknown, fallback: number): number => {
-  const numericValue =
-    typeof value === "number"
-      ? value
-      : typeof value === "string"
-        ? Number(value)
-        : Number.NaN;
-  if (!Number.isFinite(numericValue)) {
-    return fallback;
-  }
-
-  const rounded = Math.floor(numericValue);
-  if (rounded < MIN_POMODORO_MINUTES) {
-    return MIN_POMODORO_MINUTES;
-  }
-  if (rounded > MAX_POMODORO_MINUTES) {
-    return MAX_POMODORO_MINUTES;
-  }
-  return rounded;
-};
-
-const getPomodoroDurationSeconds = (
-  phase: PomodoroPhase,
-  focusMinutes: number,
-  breakMinutes: number
-): number => {
-  return (phase === "focus" ? focusMinutes : breakMinutes) * 60;
-};
-
-const normalizePomodoroPersistedStateFromUnknown = (
-  value: unknown
-): PomodoroPersistedState => {
-  const source = typeof value === "object" && value !== null ? value : {};
-  const record = source as Record<string, unknown>;
-  const phase: PomodoroPhase = record.phase === "break" ? "break" : "focus";
-  const focusMinutes = normalizePomodoroMinutes(
-    record.focusMinutes,
-    DEFAULT_POMODORO_FOCUS_MINUTES
-  );
-  const breakMinutes = normalizePomodoroMinutes(
-    record.breakMinutes,
-    DEFAULT_POMODORO_BREAK_MINUTES
-  );
-  const maxSeconds = getPomodoroDurationSeconds(phase, focusMinutes, breakMinutes);
-  const secondsSource =
-    typeof record.secondsRemaining === "number"
-      ? record.secondsRemaining
-      : typeof record.secondsRemaining === "string"
-        ? Number(record.secondsRemaining)
-        : Number.NaN;
-  const secondsRemaining = Number.isFinite(secondsSource)
-    ? Math.min(maxSeconds, Math.max(0, Math.floor(secondsSource)))
-    : maxSeconds;
-  const completedFocusSessionsSource =
-    typeof record.completedFocusSessions === "number"
-      ? record.completedFocusSessions
-      : typeof record.completedFocusSessions === "string"
-        ? Number(record.completedFocusSessions)
-        : Number.NaN;
-  const completedFocusSessions = Number.isFinite(completedFocusSessionsSource)
-    ? Math.max(0, Math.floor(completedFocusSessionsSource))
-    : 0;
-
-  return {
-    phase,
-    secondsRemaining,
-    focusMinutes,
-    breakMinutes,
-    isRunning: record.isRunning === true,
-    completedFocusSessions,
-    isCollapsed: record.isCollapsed === true,
   };
 };
 
@@ -1702,7 +1605,6 @@ export function DataEntryForm() {
     ...DEFAULT_APP_SETTINGS,
   });
   const settingsEnvFileInputRef = useRef<HTMLInputElement | null>(null);
-  const pomodoroAudioContextRef = useRef<AudioContext | null>(null);
   const [settingsEnvImportMessage, setSettingsEnvImportMessage] = useState<{
     type: "success" | "error";
     text: string;
@@ -1716,20 +1618,6 @@ export function DataEntryForm() {
   const [basicWriteSkipFields, setBasicWriteSkipFields] = useState<BasicWriteSkipFields>({
     ...DEFAULT_BASIC_WRITE_SKIP_FIELDS,
   });
-  const [pomodoroPhase, setPomodoroPhase] = useState<PomodoroPhase>("focus");
-  const [pomodoroFocusMinutes, setPomodoroFocusMinutes] = useState(
-    DEFAULT_POMODORO_FOCUS_MINUTES
-  );
-  const [pomodoroBreakMinutes, setPomodoroBreakMinutes] = useState(
-    DEFAULT_POMODORO_BREAK_MINUTES
-  );
-  const [pomodoroSecondsRemaining, setPomodoroSecondsRemaining] = useState(
-    DEFAULT_POMODORO_FOCUS_MINUTES * 60
-  );
-  const [isPomodoroRunning, setIsPomodoroRunning] = useState(false);
-  const [completedPomodoroFocusSessions, setCompletedPomodoroFocusSessions] =
-    useState(0);
-  const [isPomodoroCollapsed, setIsPomodoroCollapsed] = useState(false);
 
   const [residentFormData, setResidentFormData] = useState<ResidentFormData>({
     ...DEFAULT_RESIDENT_FORM_DATA,
@@ -1742,13 +1630,6 @@ export function DataEntryForm() {
     useState(false);
 
   const [pdfFile, setPdfFile] = useState<string | null>(null);
-  const [pdfRecognizedText, setPdfRecognizedText] = useState("");
-  const [pdfRecognitionMessage, setPdfRecognitionMessage] = useState("");
-  const [pdfRecognitionError, setPdfRecognitionError] = useState("");
-  const [pdfRecognitionProgress, setPdfRecognitionProgress] = useState("");
-  const [pdfRecognitionSource, setPdfRecognitionSource] =
-    useState<PdfTextRecognitionSource | null>(null);
-  const [isPdfTextRecognizing, setIsPdfTextRecognizing] = useState(false);
   const [savedEntries, setSavedEntries] = useState<SavedEntry[]>([]);
   const [savedResidentEntries, setSavedResidentEntries] = useState<SavedResidentEntry[]>([]);
   const [editingBasicEntryId, setEditingBasicEntryId] = useState<number | null>(null);
@@ -2287,14 +2168,6 @@ export function DataEntryForm() {
         setBasicWriteSkipFields(
           normalizeBasicWriteSkipFieldsFromUnknown(parsed.basicWriteSkipFields)
         );
-        const normalizedPomodoro = normalizePomodoroPersistedStateFromUnknown(parsed.pomodoro);
-        setPomodoroPhase(normalizedPomodoro.phase);
-        setPomodoroFocusMinutes(normalizedPomodoro.focusMinutes);
-        setPomodoroBreakMinutes(normalizedPomodoro.breakMinutes);
-        setPomodoroSecondsRemaining(normalizedPomodoro.secondsRemaining);
-        setIsPomodoroRunning(normalizedPomodoro.isRunning);
-        setCompletedPomodoroFocusSessions(normalizedPomodoro.completedFocusSessions);
-        setIsPomodoroCollapsed(normalizedPomodoro.isCollapsed);
         const normalizedResidentFormData = normalizeResidentFormDataFromUnknown(
           parsed.residentFormData
         );
@@ -2352,15 +2225,6 @@ export function DataEntryForm() {
       isPhoneThreeThreeFourFormatEnabled,
       formData,
       basicWriteSkipFields,
-      pomodoro: {
-        phase: pomodoroPhase,
-        secondsRemaining: pomodoroSecondsRemaining,
-        focusMinutes: pomodoroFocusMinutes,
-        breakMinutes: pomodoroBreakMinutes,
-        isRunning: isPomodoroRunning,
-        completedFocusSessions: completedPomodoroFocusSessions,
-        isCollapsed: isPomodoroCollapsed,
-      },
       residentFormData,
       savedEntries,
       savedResidentEntries,
@@ -2382,13 +2246,6 @@ export function DataEntryForm() {
     isPhoneThreeThreeFourFormatEnabled,
     formData,
     basicWriteSkipFields,
-    pomodoroPhase,
-    pomodoroFocusMinutes,
-    pomodoroBreakMinutes,
-    pomodoroSecondsRemaining,
-    isPomodoroRunning,
-    completedPomodoroFocusSessions,
-    isPomodoroCollapsed,
     residentFormData,
     savedEntries,
     savedResidentEntries,
@@ -2765,157 +2622,6 @@ export function DataEntryForm() {
       [section]: null,
     }));
   };
-
-  const formatPomodoroTime = (seconds: number): string => {
-    const clampedSeconds = Math.max(0, Math.floor(seconds));
-    const minutesPart = Math.floor(clampedSeconds / 60)
-      .toString()
-      .padStart(2, "0");
-    const secondsPart = (clampedSeconds % 60).toString().padStart(2, "0");
-    return `${minutesPart}:${secondsPart}`;
-  };
-
-  const playPomodoroAlarm = async () => {
-    if (typeof window === "undefined") {
-      return;
-    }
-
-    try {
-      if (!pomodoroAudioContextRef.current) {
-        const AudioContextClass = window.AudioContext;
-        if (!AudioContextClass) {
-          return;
-        }
-        pomodoroAudioContextRef.current = new AudioContextClass();
-      }
-
-      const context = pomodoroAudioContextRef.current;
-      if (context.state === "suspended") {
-        await context.resume();
-      }
-
-      const startTime = context.currentTime + 0.02;
-      const tones: Array<{ offset: number; frequency: number; duration: number }> = [
-        { offset: 0, frequency: 880, duration: 0.16 },
-        { offset: 0.2, frequency: 988, duration: 0.16 },
-        { offset: 0.4, frequency: 1318, duration: 0.22 },
-      ];
-
-      for (const tone of tones) {
-        const oscillator = context.createOscillator();
-        const gainNode = context.createGain();
-        oscillator.type = "sine";
-        oscillator.frequency.setValueAtTime(tone.frequency, startTime + tone.offset);
-        gainNode.gain.setValueAtTime(0.0001, startTime + tone.offset);
-        gainNode.gain.exponentialRampToValueAtTime(
-          0.18,
-          startTime + tone.offset + 0.02
-        );
-        gainNode.gain.exponentialRampToValueAtTime(
-          0.0001,
-          startTime + tone.offset + tone.duration
-        );
-        oscillator.connect(gainNode);
-        gainNode.connect(context.destination);
-        oscillator.start(startTime + tone.offset);
-        oscillator.stop(startTime + tone.offset + tone.duration + 0.04);
-      }
-    } catch {
-      // 通知音再生失敗はUI動作を継続
-    }
-  };
-
-  const handlePomodoroToggle = () => {
-    setIsPomodoroRunning((prev) => !prev);
-  };
-
-  const handlePomodoroReset = () => {
-    setIsPomodoroRunning(false);
-    setPomodoroPhase("focus");
-    setPomodoroSecondsRemaining(
-      getPomodoroDurationSeconds("focus", pomodoroFocusMinutes, pomodoroBreakMinutes)
-    );
-  };
-
-  const handlePomodoroSkipPhase = () => {
-    setPomodoroPhase((prev) => {
-      const nextPhase: PomodoroPhase = prev === "focus" ? "break" : "focus";
-      setPomodoroSecondsRemaining(
-        getPomodoroDurationSeconds(nextPhase, pomodoroFocusMinutes, pomodoroBreakMinutes)
-      );
-      return nextPhase;
-    });
-  };
-
-  const handlePomodoroFocusMinutesChange = (value: string) => {
-    setPomodoroFocusMinutes(
-      normalizePomodoroMinutes(value, DEFAULT_POMODORO_FOCUS_MINUTES)
-    );
-  };
-
-  const handlePomodoroBreakMinutesChange = (value: string) => {
-    setPomodoroBreakMinutes(
-      normalizePomodoroMinutes(value, DEFAULT_POMODORO_BREAK_MINUTES)
-    );
-  };
-
-  useEffect(() => {
-    if (!isPomodoroRunning) {
-      return;
-    }
-
-    const timerId = window.setInterval(() => {
-      setPomodoroSecondsRemaining((prev) => Math.max(0, prev - 1));
-    }, 1000);
-
-    return () => {
-      window.clearInterval(timerId);
-    };
-  }, [isPomodoroRunning]);
-
-  useEffect(() => {
-    if (!isPomodoroRunning || pomodoroSecondsRemaining > 0) {
-      return;
-    }
-
-    void playPomodoroAlarm();
-
-    if (pomodoroPhase === "focus") {
-      setCompletedPomodoroFocusSessions((prev) => prev + 1);
-    }
-
-    const nextPhase: PomodoroPhase = pomodoroPhase === "focus" ? "break" : "focus";
-    setPomodoroPhase(nextPhase);
-    setPomodoroSecondsRemaining(
-      getPomodoroDurationSeconds(nextPhase, pomodoroFocusMinutes, pomodoroBreakMinutes)
-    );
-  }, [
-    isPomodoroRunning,
-    pomodoroSecondsRemaining,
-    pomodoroPhase,
-    pomodoroFocusMinutes,
-    pomodoroBreakMinutes,
-  ]);
-
-  useEffect(() => {
-    if (isPomodoroRunning) {
-      return;
-    }
-    setPomodoroSecondsRemaining(
-      getPomodoroDurationSeconds(pomodoroPhase, pomodoroFocusMinutes, pomodoroBreakMinutes)
-    );
-  }, [isPomodoroRunning, pomodoroPhase, pomodoroFocusMinutes, pomodoroBreakMinutes]);
-
-  useEffect(() => {
-    return () => {
-      const context = pomodoroAudioContextRef.current;
-      pomodoroAudioContextRef.current = null;
-      if (!context) {
-        return;
-      }
-      void context.close().catch(() => undefined);
-    };
-  }, []);
 
   const handleBasicWriteSkipFieldToggle = (
     fieldName: BasicWriteSkipFieldName,
@@ -3694,15 +3400,6 @@ export function DataEntryForm() {
     input.click();
   };
 
-  const resetPdfRecognitionState = () => {
-    setPdfRecognizedText("");
-    setPdfRecognitionMessage("");
-    setPdfRecognitionError("");
-    setPdfRecognitionProgress("");
-    setPdfRecognitionSource(null);
-    setIsPdfTextRecognizing(false);
-  };
-
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -3717,59 +3414,6 @@ export function DataEntryForm() {
     currentPdfObjectUrlRef.current = url;
     currentPdfBlobRef.current = file;
     setPdfFile(url);
-    resetPdfRecognitionState();
-  };
-
-  const copyTextToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch (err) {
-      try {
-        const textarea = document.createElement("textarea");
-        textarea.value = text;
-        textarea.style.position = "fixed";
-        textarea.style.opacity = "0";
-        document.body.appendChild(textarea);
-        textarea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textarea);
-      } catch (fallbackErr) {
-        console.error(err, fallbackErr);
-      }
-    }
-  };
-
-  const handleExtractPdfText = async () => {
-    if (!currentPdfBlobRef.current || isPdfTextRecognizing) {
-      return;
-    }
-
-    setIsPdfTextRecognizing(true);
-    setPdfRecognitionError("");
-    setPdfRecognitionMessage("");
-    setPdfRecognitionProgress("PDF内テキストを確認中...");
-    setPdfRecognizedText("");
-    setPdfRecognitionSource(null);
-
-    try {
-      const result = await extractPdfTextWithOptionalOcr(currentPdfBlobRef.current, {
-        onOcrProgress: setPdfRecognitionProgress,
-      });
-      setPdfRecognizedText(result.text);
-      setPdfRecognitionSource(result.source);
-      setPdfRecognitionMessage(result.message);
-      setPdfRecognitionProgress("");
-    } catch (error) {
-      console.error(error);
-      setPdfRecognitionError(
-        error instanceof Error
-          ? error.message
-          : "PDFの文字抽出またはOCRに失敗しました。"
-      );
-      setPdfRecognitionProgress("");
-    } finally {
-      setIsPdfTextRecognizing(false);
-    }
   };
 
   const createBasicEntryFromForm = () => {
@@ -5895,120 +5539,6 @@ export function DataEntryForm() {
               <FileUser className="w-4 h-4" />
               住民票モード
             </button>
-          </div>
-
-          <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <Timer className="w-4 h-4 text-amber-700" />
-                <p className="text-sm font-semibold text-amber-900">ポモドーロタイマー</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <span
-                  className={`inline-flex items-center rounded px-2 py-0.5 text-xs ${
-                    pomodoroPhase === "focus"
-                      ? "bg-amber-200 text-amber-900"
-                      : "bg-emerald-200 text-emerald-900"
-                  }`}
-                >
-                  {pomodoroPhase === "focus" ? "作業時間" : "休憩時間"}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsPomodoroCollapsed((prev) => !prev);
-                  }}
-                  className="px-2 py-1 rounded bg-white border border-amber-300 text-amber-900 text-xs hover:bg-amber-100 flex items-center gap-1"
-                  aria-expanded={!isPomodoroCollapsed}
-                  aria-label={isPomodoroCollapsed ? "ポモドーロを展開" : "ポモドーロを折り畳み"}
-                >
-                  {isPomodoroCollapsed ? (
-                    <>
-                      <ChevronDown className="w-3.5 h-3.5" />
-                      展開
-                    </>
-                  ) : (
-                    <>
-                      <ChevronUp className="w-3.5 h-3.5" />
-                      折り畳み
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-            {!isPomodoroCollapsed && (
-              <>
-                <div className="mt-2 flex items-center justify-between gap-2">
-                  <p className="text-2xl tracking-widest tabular-nums text-amber-950">
-                    {formatPomodoroTime(pomodoroSecondsRemaining)}
-                  </p>
-                  <p className="text-xs text-amber-800">
-                    完了セット: {completedPomodoroFocusSessions}
-                  </p>
-                </div>
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handlePomodoroToggle}
-                      className="px-3 py-1.5 rounded bg-amber-600 text-white text-xs hover:bg-amber-700 flex items-center gap-1"
-                    >
-                      {isPomodoroRunning ? (
-                        <>
-                          <Pause className="w-3.5 h-3.5" />
-                          一時停止
-                        </>
-                      ) : (
-                        <>
-                          <Play className="w-3.5 h-3.5" />
-                          開始
-                        </>
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handlePomodoroSkipPhase}
-                      className="px-3 py-1.5 rounded bg-sky-600 text-white text-xs hover:bg-sky-700 flex items-center gap-1"
-                    >
-                      <SkipForward className="w-3.5 h-3.5" />
-                      フェーズ切替
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handlePomodoroReset}
-                      className="px-3 py-1.5 rounded bg-gray-600 text-white text-xs hover:bg-gray-700 flex items-center gap-1"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      リセット
-                    </button>
-                  </div>
-                </div>
-                <div className="mt-3 grid grid-cols-2 gap-3">
-                  <label className="text-xs text-amber-900">
-                    作業(分)
-                    <input
-                      type="number"
-                      min={MIN_POMODORO_MINUTES}
-                      max={MAX_POMODORO_MINUTES}
-                      value={pomodoroFocusMinutes}
-                      onChange={(e) => handlePomodoroFocusMinutesChange(e.target.value)}
-                      className="mt-1 w-full px-2 py-1.5 border border-amber-300 rounded bg-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    />
-                  </label>
-                  <label className="text-xs text-amber-900">
-                    休憩(分)
-                    <input
-                      type="number"
-                      min={MIN_POMODORO_MINUTES}
-                      max={MAX_POMODORO_MINUTES}
-                      value={pomodoroBreakMinutes}
-                      onChange={(e) => handlePomodoroBreakMinutesChange(e.target.value)}
-                      className="mt-1 w-full px-2 py-1.5 border border-amber-300 rounded bg-white text-sm focus:outline-none focus:ring-2 focus:ring-amber-500"
-                    />
-                  </label>
-                </div>
-              </>
-            )}
           </div>
 
           {mode === "basic" ? (
@@ -8714,29 +8244,7 @@ export function DataEntryForm() {
             />
             {pdfFile ? (
               <div className="w-full h-full flex flex-col gap-2">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleExtractPdfText}
-                      disabled={isPdfTextRecognizing}
-                      className="px-3 py-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed text-sm"
-                    >
-                      {isPdfTextRecognizing ? "文字抽出中..." : "文字抽出"}
-                    </button>
-                    {pdfRecognizedText && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          void copyTextToClipboard(pdfRecognizedText);
-                        }}
-                        className="px-3 py-1.5 bg-gray-700 text-white rounded hover:bg-gray-800 text-sm flex items-center gap-2"
-                      >
-                        <Copy className="w-4 h-4" />
-                        抽出文字をコピー
-                      </button>
-                    )}
-                  </div>
+                <div className="flex justify-end">
                   <button
                     type="button"
                     onClick={handleOpenPdfPicker}
@@ -8746,45 +8254,6 @@ export function DataEntryForm() {
                     PDFを変更
                   </button>
                 </div>
-                {(pdfRecognitionProgress ||
-                  pdfRecognitionMessage ||
-                  pdfRecognitionError ||
-                  pdfRecognizedText) && (
-                  <div className="rounded border border-gray-200 bg-white p-3">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p
-                        className={`text-sm ${
-                          pdfRecognitionError
-                            ? "text-red-600"
-                            : pdfRecognitionSource === "ocr"
-                              ? "text-amber-700"
-                              : "text-gray-700"
-                        }`}
-                      >
-                        {pdfRecognitionError ||
-                          pdfRecognitionProgress ||
-                          pdfRecognitionMessage}
-                      </p>
-                      {pdfRecognitionSource && (
-                        <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">
-                          {pdfRecognitionSource === "embedded"
-                            ? "PDF内テキスト"
-                            : pdfRecognitionSource === "ocr"
-                              ? "OCR"
-                              : "未検出"}
-                        </span>
-                      )}
-                    </div>
-                    {pdfRecognizedText && (
-                      <textarea
-                        value={pdfRecognizedText}
-                        readOnly
-                        className="mt-2 h-28 w-full resize-none rounded border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none"
-                        aria-label="PDFから抽出した文字"
-                      />
-                    )}
-                  </div>
-                )}
                 <iframe
                   src={pdfFile}
                   className="w-full flex-1 border border-gray-300 rounded bg-white"
