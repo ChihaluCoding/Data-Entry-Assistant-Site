@@ -11,12 +11,15 @@ import {
   Copy,
   ChevronDown,
   ChevronUp,
+  Calculator,
+  Delete,
   Settings,
   X,
 } from "lucide-react";
 import { loadKenAllData, searchKenAllAddresses, type KenAllAddress } from "../lib/kenAll";
 import { findCitySuggestions, findTownSuggestions } from "../lib/addressSuggestions";
 import {
+  applyBanchiCalculatorKey,
   normalizeBanchiValueForInputAsFullWidth,
   normalizeBanchiValueForInputAsHalfWidth,
   normalizeBanchiValueAsFullWidth,
@@ -253,6 +256,22 @@ type SuggestionType = "postal" | "prefecture" | "city" | "town";
 type ResidentSection = "depart" | "registry";
 type AddressSuggestionTarget = "basic" | ResidentSection;
 type AddressSuggestionType = Exclude<SuggestionType, "postal">;
+type BanchiPadFieldName = "banchi" | "departBanchi" | "registryBanchi";
+
+const BANCHI_CALCULATOR_BUTTONS = [
+  "7",
+  "8",
+  "9",
+  "4",
+  "5",
+  "6",
+  "1",
+  "2",
+  "3",
+  "dash",
+  "0",
+  "backspace",
+] as const;
 
 type WorkerRequest =
   | { type: "init" }
@@ -1628,6 +1647,8 @@ export function DataEntryForm() {
     });
   const [isRegistrySurnameSyncEnabled, setIsRegistrySurnameSyncEnabled] =
     useState(false);
+  const [activeBanchiPadField, setActiveBanchiPadField] =
+    useState<BanchiPadFieldName | null>(null);
 
   const [pdfFile, setPdfFile] = useState<string | null>(null);
   const [savedEntries, setSavedEntries] = useState<SavedEntry[]>([]);
@@ -3025,6 +3046,57 @@ export function DataEntryForm() {
         { isRegistrySurnameSyncEnabled }
       ) as ResidentFormData;
     });
+  };
+
+  const getBanchiPadFieldValue = (fieldName: BanchiPadFieldName): string => {
+    if (fieldName === "banchi") {
+      return formData.banchi;
+    }
+
+    return residentFormData[fieldName];
+  };
+
+  const writeBanchiPadFieldValue = (
+    fieldName: BanchiPadFieldName,
+    rawValue: string
+  ) => {
+    if (fieldName === "banchi") {
+      setFormData((prev) => ({
+        ...prev,
+        banchi: normalizeBanchiValueForInputAsHalfWidth(rawValue),
+      }));
+      return;
+    }
+
+    const normalizedValue = normalizeBanchiValueForInputAsFullWidth(rawValue);
+    const syncFieldsOverride =
+      fieldName === "registryBanchi" && residentRegistrySyncFields.registryBanchi
+        ? {
+            ...residentRegistrySyncFields,
+            registryBanchi: false,
+          }
+        : residentRegistrySyncFields;
+
+    if (fieldName === "registryBanchi" && residentRegistrySyncFields.registryBanchi) {
+      setResidentRegistrySyncFields((prev) => ({
+        ...prev,
+        registryBanchi: false,
+      }));
+    }
+
+    updateResidentFormField(fieldName, normalizedValue, syncFieldsOverride);
+    setResidentActiveSection(fieldName === "departBanchi" ? "depart" : "registry");
+  };
+
+  const handleBanchiPadKey = (
+    fieldName: BanchiPadFieldName,
+    key: string
+  ) => {
+    const nextValue = applyBanchiCalculatorKey(
+      getBanchiPadFieldValue(fieldName),
+      key
+    );
+    writeBanchiPadFieldValue(fieldName, nextValue);
   };
 
   const handleResidentRegistrySyncToggle = (
@@ -5495,6 +5567,77 @@ export function DataEntryForm() {
     </label>
   );
 
+  const renderBanchiCalculatorPad = (fieldName: BanchiPadFieldName) => {
+    const isOpen = activeBanchiPadField === fieldName;
+
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() =>
+            setActiveBanchiPadField((prev) =>
+              prev === fieldName ? null : fieldName
+            )
+          }
+          className={`h-10 w-10 shrink-0 rounded border flex items-center justify-center transition-colors ${
+            isOpen
+              ? "border-blue-500 bg-blue-50 text-blue-700"
+              : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+          }`}
+          aria-label="番地入力パッド"
+          aria-expanded={isOpen}
+        >
+          <Calculator className="h-4 w-4" />
+        </button>
+        {isOpen && (
+          <div className="absolute left-0 top-full z-40 mt-2 w-52 rounded border border-gray-200 bg-white p-3 shadow-lg">
+            <div className="grid grid-cols-3 gap-2">
+              {BANCHI_CALCULATOR_BUTTONS.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => handleBanchiPadKey(fieldName, key)}
+                  className="flex h-10 items-center justify-center rounded border border-gray-200 bg-gray-50 text-sm text-gray-800 hover:bg-blue-50 hover:text-blue-700"
+                  aria-label={
+                    key === "dash"
+                      ? "区切り"
+                      : key === "backspace"
+                        ? "一文字削除"
+                        : key
+                  }
+                >
+                  {key === "dash" ? (
+                    "－"
+                  ) : key === "backspace" ? (
+                    <Delete className="h-4 w-4" />
+                  ) : (
+                    key
+                  )}
+                </button>
+              ))}
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => handleBanchiPadKey(fieldName, "clear")}
+                className="h-9 rounded bg-gray-100 text-xs text-gray-700 hover:bg-gray-200"
+              >
+                クリア
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveBanchiPadField(null)}
+                className="h-9 rounded bg-blue-600 text-xs text-white hover:bg-blue-700"
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  };
+
   return (
     <div className="data-entry-form h-screen flex bg-gray-50">
       {/* 左側：入力フォーム */}
@@ -6173,15 +6316,18 @@ export function DataEntryForm() {
                     <label className="block text-sm text-gray-700 mb-1.5">
                       番地
                     </label>
-                    <input
-                      type="text"
-                      name="banchi"
-                      value={formData.banchi}
-                      onChange={handleChange}
-                      onBlur={handleBanchiBlur}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="番地を入力"
-                    />
+                    <div className="relative flex gap-2">
+                      <input
+                        type="text"
+                        name="banchi"
+                        value={formData.banchi}
+                        onChange={handleChange}
+                        onBlur={handleBanchiBlur}
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="番地を入力"
+                      />
+                      {renderBanchiCalculatorPad("banchi")}
+                    </div>
                   </div>
 
                   {/* 建物名 */}
@@ -7252,15 +7398,18 @@ export function DataEntryForm() {
                       <label className="block text-sm text-gray-700 mb-1.5">
                         番地
                       </label>
-                      <input
-                        type="text"
-                        name="departBanchi"
-                        value={residentFormData.departBanchi}
-                        onChange={handleResidentChange}
-                        onBlur={handleBanchiBlur}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="転出番地を入力"
-                      />
+                      <div className="relative flex gap-2">
+                        <input
+                          type="text"
+                          name="departBanchi"
+                          value={residentFormData.departBanchi}
+                          onChange={handleResidentChange}
+                          onBlur={handleBanchiBlur}
+                          className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="転出番地を入力"
+                        />
+                        {renderBanchiCalculatorPad("departBanchi")}
+                      </div>
                     </div>
 
                     {/* 転出建物名 */}
@@ -7750,15 +7899,18 @@ export function DataEntryForm() {
                         <label className="block text-sm text-gray-700">番地</label>
                         {renderRegistrySyncCheckbox("registryBanchi")}
                       </div>
-                      <input
-                        type="text"
-                        name="registryBanchi"
-                        value={residentFormData.registryBanchi}
-                        onChange={handleResidentChange}
-                        onBlur={handleBanchiBlur}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="本籍番地を入力"
-                      />
+                      <div className="relative flex gap-2">
+                        <input
+                          type="text"
+                          name="registryBanchi"
+                          value={residentFormData.registryBanchi}
+                          onChange={handleResidentChange}
+                          onBlur={handleBanchiBlur}
+                          className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="本籍番地を入力"
+                        />
+                        {renderBanchiCalculatorPad("registryBanchi")}
+                      </div>
                     </div>
 
                     {/* 本籍建物名 */}

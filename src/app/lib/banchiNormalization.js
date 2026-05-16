@@ -38,6 +38,7 @@ const toHalfWidthAlphabet = (rawValue) => {
 const ANY_KANJI_PATTERN = /[\u3400-\u4DBF\u4E00-\u9FFF々〆ヵヶ]/g;
 const HIRAGANA_BANCHI_SEPARATOR_PATTERN = /(ちょうめ|ばんち|ばん|ごう)/g;
 const DASH_VARIANT_PATTERN = /[-‐‑‒–—―ｰー－]+/g;
+const BANCHI_CALCULATOR_DIGIT_PATTERN = /^[0-9０-９]$/;
 
 const formatBanchiValue = (rawValue, options = {}) => {
   const trimmed = rawValue.trim();
@@ -96,4 +97,24 @@ export function normalizeBanchiValueForInputAsFullWidth(rawValue) {
     halfWidthHyphen: false,
     preserveEdgeHyphen: true,
   });
+}
+
+export function applyBanchiCalculatorKey(currentValue, key) {
+  if (key === "backspace") {
+    return currentValue.slice(0, -1);
+  }
+
+  if (key === "clear") {
+    return "";
+  }
+
+  if (key === "dash") {
+    return `${currentValue}－`;
+  }
+
+  if (BANCHI_CALCULATOR_DIGIT_PATTERN.test(key)) {
+    return `${currentValue}${key}`;
+  }
+
+  return currentValue;
 }

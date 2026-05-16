@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  applyBanchiCalculatorKey,
   normalizeBanchiValueForInputAsFullWidth,
   normalizeBanchiValueForInputAsHalfWidth,
   normalizeBanchiValueAsFullWidth,
@@ -47,4 +48,15 @@ test("番地入力中は単独や末尾のハイフンを保持する", () => {
   assert.equal(normalizeBanchiValueForInputAsHalfWidth("12-"), "12－");
   assert.equal(normalizeBanchiValueForInputAsFullWidth("-"), "－");
   assert.equal(normalizeBanchiValueForInputAsFullWidth("１２-"), "１２－");
+});
+
+test("番地電卓キーは数字と区切りの追加、末尾削除、クリアができる", () => {
+  assert.equal(applyBanchiCalculatorKey("", "1"), "1");
+  assert.equal(applyBanchiCalculatorKey("12", "dash"), "12－");
+  assert.equal(applyBanchiCalculatorKey("12－3", "backspace"), "12－");
+  assert.equal(applyBanchiCalculatorKey("12－3", "clear"), "");
+});
+
+test("番地電卓キーは未定義キーでは値を変更しない", () => {
+  assert.equal(applyBanchiCalculatorKey("12", "plus"), "12");
 });
