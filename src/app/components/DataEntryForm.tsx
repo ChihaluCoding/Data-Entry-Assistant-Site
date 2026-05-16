@@ -60,6 +60,7 @@ import {
   type LocalAddressCandidate,
   type LocalAddressCheckResult,
 } from "../lib/localAddressAi";
+import { extractPdfTextWithOptionalOcr } from "../lib/pdfTextRecognition.js";
 
 interface FormData {
   operator: string;
@@ -256,6 +257,7 @@ const resolveSheetRowFromMap = (
 
 type SuggestionType = "postal" | "prefecture" | "city" | "town";
 type ResidentSection = "depart" | "registry";
+type PdfTextRecognitionSource = "embedded" | "ocr" | "none";
 type AddressSuggestionTarget = "basic" | ResidentSection;
 type AddressSuggestionType = Exclude<SuggestionType, "postal">;
 
@@ -1740,6 +1742,13 @@ export function DataEntryForm() {
     useState(false);
 
   const [pdfFile, setPdfFile] = useState<string | null>(null);
+  const [pdfRecognizedText, setPdfRecognizedText] = useState("");
+  const [pdfRecognitionMessage, setPdfRecognitionMessage] = useState("");
+  const [pdfRecognitionError, setPdfRecognitionError] = useState("");
+  const [pdfRecognitionProgress, setPdfRecognitionProgress] = useState("");
+  const [pdfRecognitionSource, setPdfRecognitionSource] =
+    useState<PdfTextRecognitionSource | null>(null);
+  const [isPdfTextRecognizing, setIsPdfTextRecognizing] = useState(false);
   const [savedEntries, setSavedEntries] = useState<SavedEntry[]>([]);
   const [savedResidentEntries, setSavedResidentEntries] = useState<SavedResidentEntry[]>([]);
   const [editingBasicEntryId, setEditingBasicEntryId] = useState<number | null>(null);
@@ -3685,6 +3694,15 @@ export function DataEntryForm() {
     input.click();
   };
 
+  const resetPdfRecognitionState = () => {
+    setPdfRecognizedText("");
+    setPdfRecognitionMessage("");
+    setPdfRecognitionError("");
+    setPdfRecognitionProgress("");
+    setPdfRecognitionSource(null);
+    setIsPdfTextRecognizing(false);
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -3699,6 +3717,59 @@ export function DataEntryForm() {
     currentPdfObjectUrlRef.current = url;
     currentPdfBlobRef.current = file;
     setPdfFile(url);
+    resetPdfRecognitionState();
+  };
+
+  const copyTextToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (err) {
+      try {
+        const textarea = document.createElement("textarea");
+        textarea.value = text;
+        textarea.style.position = "fixed";
+        textarea.style.opacity = "0";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      } catch (fallbackErr) {
+        console.error(err, fallbackErr);
+      }
+    }
+  };
+
+  const handleExtractPdfText = async () => {
+    if (!currentPdfBlobRef.current || isPdfTextRecognizing) {
+      return;
+    }
+
+    setIsPdfTextRecognizing(true);
+    setPdfRecognitionError("");
+    setPdfRecognitionMessage("");
+    setPdfRecognitionProgress("PDF内テキストを確認中...");
+    setPdfRecognizedText("");
+    setPdfRecognitionSource(null);
+
+    try {
+      const result = await extractPdfTextWithOptionalOcr(currentPdfBlobRef.current, {
+        onOcrProgress: setPdfRecognitionProgress,
+      });
+      setPdfRecognizedText(result.text);
+      setPdfRecognitionSource(result.source);
+      setPdfRecognitionMessage(result.message);
+      setPdfRecognitionProgress("");
+    } catch (error) {
+      console.error(error);
+      setPdfRecognitionError(
+        error instanceof Error
+          ? error.message
+          : "PDFの文字抽出またはOCRに失敗しました。"
+      );
+      setPdfRecognitionProgress("");
+    } finally {
+      setIsPdfTextRecognizing(false);
+    }
   };
 
   const createBasicEntryFromForm = () => {
@@ -8643,7 +8714,29 @@ export function DataEntryForm() {
             />
             {pdfFile ? (
               <div className="w-full h-full flex flex-col gap-2">
-                <div className="flex justify-end">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleExtractPdfText}
+                      disabled={isPdfTextRecognizing}
+                      className="px-3 py-1.5 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:bg-emerald-300 disabled:cursor-not-allowed text-sm"
+                    >
+                      {isPdfTextRecognizing ? "文字抽出中..." : "文字抽出"}
+                    </button>
+                    {pdfRecognizedText && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void copyTextToClipboard(pdfRecognizedText);
+                        }}
+                        className="px-3 py-1.5 bg-gray-700 text-white rounded hover:bg-gray-800 text-sm flex items-center gap-2"
+                      >
+                        <Copy className="w-4 h-4" />
+                        抽出文字をコピー
+                      </button>
+                    )}
+                  </div>
                   <button
                     type="button"
                     onClick={handleOpenPdfPicker}
@@ -8653,6 +8746,45 @@ export function DataEntryForm() {
                     PDFを変更
                   </button>
                 </div>
+                {(pdfRecognitionProgress ||
+                  pdfRecognitionMessage ||
+                  pdfRecognitionError ||
+                  pdfRecognizedText) && (
+                  <div className="rounded border border-gray-200 bg-white p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p
+                        className={`text-sm ${
+                          pdfRecognitionError
+                            ? "text-red-600"
+                            : pdfRecognitionSource === "ocr"
+                              ? "text-amber-700"
+                              : "text-gray-700"
+                        }`}
+                      >
+                        {pdfRecognitionError ||
+                          pdfRecognitionProgress ||
+                          pdfRecognitionMessage}
+                      </p>
+                      {pdfRecognitionSource && (
+                        <span className="rounded bg-gray-100 px-2 py-1 text-xs text-gray-600">
+                          {pdfRecognitionSource === "embedded"
+                            ? "PDF内テキスト"
+                            : pdfRecognitionSource === "ocr"
+                              ? "OCR"
+                              : "未検出"}
+                        </span>
+                      )}
+                    </div>
+                    {pdfRecognizedText && (
+                      <textarea
+                        value={pdfRecognizedText}
+                        readOnly
+                        className="mt-2 h-28 w-full resize-none rounded border border-gray-300 bg-gray-50 px-3 py-2 text-sm text-gray-800 focus:outline-none"
+                        aria-label="PDFから抽出した文字"
+                      />
+                    )}
+                  </div>
+                )}
                 <iframe
                   src={pdfFile}
                   className="w-full flex-1 border border-gray-300 rounded bg-white"
