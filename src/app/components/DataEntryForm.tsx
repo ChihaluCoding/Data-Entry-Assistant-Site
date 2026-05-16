@@ -50,6 +50,7 @@ import {
   isResidentEditableNameField,
   joinWithFullWidthSpace,
   normalizeRegistryNameInputWithSyncedSurname,
+  shouldDeferRegistrySurnameSyncInput,
   syncRegistrySurnameWithDepartName,
   syncCheckedRegistryFieldsWithDepart,
   toFullWidthSpace,
@@ -3276,7 +3277,12 @@ export function DataEntryForm() {
     }));
   };
 
-  const updateResidentFormField = (fieldName: string, fieldValue: string) => {
+  const updateResidentFormField = (
+    fieldName: string,
+    fieldValue: string,
+    syncFieldsOverride?: ResidentRegistrySyncFields,
+    options: { skipRegistrySurnameSync?: boolean } = {}
+  ) => {
     setResidentFormData((prev) => {
       const next = {
         ...prev,
@@ -3284,8 +3290,11 @@ export function DataEntryForm() {
       } as ResidentFormData;
       return syncCheckedRegistryFieldsWithDepart(
         next,
-        residentRegistrySyncFields,
-        { isRegistrySurnameSyncEnabled }
+        syncFieldsOverride ?? residentRegistrySyncFields,
+        {
+          isRegistrySurnameSyncEnabled:
+            isRegistrySurnameSyncEnabled && !options.skipRegistrySurnameSync,
+        }
       ) as ResidentFormData;
     });
   };
@@ -3491,8 +3500,15 @@ export function DataEntryForm() {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     const { name, value } = e.target;
+    const isRegistrySurnameImeComposing = shouldDeferRegistrySurnameSyncInput(
+      name,
+      isRegistrySurnameSyncEnabled,
+      isNativeImeComposing(e.nativeEvent)
+    );
     const normalizedValue =
-      name === "registryName" && isRegistrySurnameSyncEnabled
+      name === "registryName" &&
+      isRegistrySurnameSyncEnabled &&
+      !isRegistrySurnameImeComposing
         ? normalizeRegistryNameInputWithSyncedSurname(
             value,
             residentFormData.departName
@@ -3500,6 +3516,21 @@ export function DataEntryForm() {
         : isResidentEditableNameField(name)
           ? toFullWidthSpace(value)
           : value;
+    const shouldUnlockRegistrySyncForInput = Boolean(
+      residentRegistrySyncFields[name]
+    );
+    const registrySyncFieldsForInput = shouldUnlockRegistrySyncForInput
+      ? {
+          ...residentRegistrySyncFields,
+          [name]: false,
+        }
+      : residentRegistrySyncFields;
+    if (shouldUnlockRegistrySyncForInput) {
+      setResidentRegistrySyncFields((prev) => ({
+        ...prev,
+        [name]: false,
+      }));
+    }
 
     const residentSection = getResidentSectionFromFieldName(name);
     if (residentSection) {
@@ -3533,7 +3564,7 @@ export function DataEntryForm() {
       const sanitizedTown = sanitizeTownValue(normalizedValue);
       setActiveSuggestionIndex((prev) => ({ ...prev, town: -1 }));
       setIsTownSuggestionVisible(sanitizedTown.trim().length > 0);
-      updateResidentFormField(name, sanitizedTown);
+      updateResidentFormField(name, sanitizedTown, registrySyncFieldsForInput);
       return;
     }
 
@@ -3550,13 +3581,18 @@ export function DataEntryForm() {
     if (name === "departBanchi" || name === "registryBanchi") {
       updateResidentFormField(
         name,
-        normalizeBanchiValueForInputAsFullWidth(normalizedValue)
+        normalizeBanchiValueForInputAsFullWidth(normalizedValue),
+        registrySyncFieldsForInput
       );
       return;
     }
 
     if (name === "departBuilding" || name === "registryBuilding") {
-      updateResidentFormField(name, normalizeBuildingValue(normalizedValue));
+      updateResidentFormField(
+        name,
+        normalizeBuildingValue(normalizedValue),
+        registrySyncFieldsForInput
+      );
       return;
     }
 
@@ -3574,12 +3610,32 @@ export function DataEntryForm() {
           name,
           normalizedValue,
           isNativeImeComposing(e.nativeEvent)
-        )
+        ),
+        registrySyncFieldsForInput
       );
       return;
     }
 
-    updateResidentFormField(name, normalizedValue);
+    updateResidentFormField(name, normalizedValue, registrySyncFieldsForInput, {
+      skipRegistrySurnameSync: isRegistrySurnameImeComposing,
+    });
+  };
+
+  const handleResidentNameCompositionEnd = (
+    e: React.CompositionEvent<HTMLInputElement>
+  ) => {
+    const { name, value } = e.currentTarget;
+    if (name !== "registryName" || !isRegistrySurnameSyncEnabled) {
+      return;
+    }
+
+    updateResidentFormField(
+      name,
+      normalizeRegistryNameInputWithSyncedSurname(
+        value,
+        residentFormData.departName
+      )
+    );
   };
 
   const handleResidentAreaCompositionEnd = (
@@ -7642,6 +7698,7 @@ export function DataEntryForm() {
                         name="registryName"
                         value={residentFormData.registryName}
                         onChange={handleResidentChange}
+                        onCompositionEnd={handleResidentNameCompositionEnd}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="本籍地名を入力"
                       />

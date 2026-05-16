@@ -6,7 +6,9 @@ import {
   getGivenNameFromResidentName,
   getSurnameFromResidentName,
   isResidentEditableNameField,
+  joinSurnameAndGivenName,
   normalizeRegistryNameInputWithSyncedSurname,
+  shouldDeferRegistrySurnameSyncInput,
   syncRegistrySurnameWithDepartName,
   syncCheckedRegistryFieldsWithDepart,
   toFullWidthSpace,
@@ -64,6 +66,18 @@ test("本籍名前の苗字だけ同期は転出名の全角空白より前を�
   assert.equal(result.registryName, "山田　花子");
 });
 
+test("本籍名前の苗字だけ同期は名が空でも苗字後ろの全角空白を保持する", () => {
+  const formData = createResidentFormData({
+    departName: "山田　太郎",
+    registryName: "",
+  });
+
+  const result = syncRegistrySurnameWithDepartName(formData);
+
+  assert.equal(result.registryName, "山田　");
+  assert.equal(joinSurnameAndGivenName("山田", ""), "山田　");
+});
+
 test("本籍名前の苗字だけ同期ON中は転出名の苗字変更だけが追従する", () => {
   const formData = createResidentFormData({
     departName: "佐藤　太郎",
@@ -89,6 +103,20 @@ test("本籍名前の苗字だけ同期ON中は転出苗字に続けて入力し
     normalizeRegistryNameInputWithSyncedSurname("山田花子", "山田　太郎"),
     "山田　花子"
   );
+});
+
+test("本籍名前の苗字だけ同期ON中は苗字だけの入力を全角空白付きに補正する", () => {
+  assert.equal(
+    normalizeRegistryNameInputWithSyncedSurname("山田", "山田　太郎"),
+    "山田　"
+  );
+});
+
+test("本籍名前の苗字だけ同期ON中はIME変換中の正規化を遅延する", () => {
+  assert.equal(shouldDeferRegistrySurnameSyncInput("registryName", true, true), true);
+  assert.equal(shouldDeferRegistrySurnameSyncInput("registryName", true, false), false);
+  assert.equal(shouldDeferRegistrySurnameSyncInput("departName", true, true), false);
+  assert.equal(shouldDeferRegistrySurnameSyncInput("registryName", false, true), false);
 });
 
 test("本籍名前の苗字だけ同期ON中でも全角空白付きの手入力名を保持する", () => {

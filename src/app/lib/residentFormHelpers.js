@@ -16,12 +16,32 @@ export function joinWithFullWidthSpace(parts) {
   return parts.filter(Boolean).join(FULL_WIDTH_SPACE);
 }
 
+export function joinSurnameAndGivenName(surname, givenName) {
+  if (!surname) {
+    return givenName;
+  }
+
+  return `${surname}${FULL_WIDTH_SPACE}${givenName}`;
+}
+
 export function toFullWidthSpace(value) {
   return value.replace(/ /g, FULL_WIDTH_SPACE);
 }
 
 export function isResidentEditableNameField(fieldName) {
   return fieldName === "departName" || fieldName === "registryName";
+}
+
+export function shouldDeferRegistrySurnameSyncInput(
+  fieldName,
+  isRegistrySurnameSyncEnabled,
+  isComposing
+) {
+  return (
+    fieldName === "registryName" &&
+    Boolean(isRegistrySurnameSyncEnabled) &&
+    Boolean(isComposing)
+  );
 }
 
 export function getSurnameFromResidentName(name) {
@@ -52,7 +72,7 @@ export function syncRegistrySurnameWithDepartName(formData) {
 
   return {
     ...formData,
-    registryName: joinWithFullWidthSpace([departSurname, registryGivenName]),
+    registryName: joinSurnameAndGivenName(departSurname, registryGivenName),
   };
 }
 
@@ -65,7 +85,7 @@ export function normalizeRegistryNameInputWithSyncedSurname(inputName, departNam
   }
 
   if (normalizedInputName === departSurname) {
-    return departSurname;
+    return joinSurnameAndGivenName(departSurname, "");
   }
 
   const prefixedSeparator = `${departSurname}${FULL_WIDTH_SPACE}`;
@@ -75,12 +95,12 @@ export function normalizeRegistryNameInputWithSyncedSurname(inputName, departNam
 
   if (normalizedInputName.startsWith(departSurname)) {
     const typedGivenName = normalizedInputName.slice(departSurname.length);
-    return joinWithFullWidthSpace([departSurname, typedGivenName]);
+    return joinSurnameAndGivenName(departSurname, typedGivenName);
   }
 
   const typedGivenName =
     getGivenNameFromResidentName(normalizedInputName) || normalizedInputName;
-  return joinWithFullWidthSpace([departSurname, typedGivenName]);
+  return joinSurnameAndGivenName(departSurname, typedGivenName);
 }
 
 export function copyDepartValueToRegistryField(formData, registryFieldName) {
