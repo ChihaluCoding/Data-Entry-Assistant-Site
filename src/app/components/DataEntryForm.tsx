@@ -554,13 +554,18 @@ const openReloadPdfDatabase = (): Promise<IDBDatabase> => {
   });
 };
 
-const saveReloadPdfBlob = async (blob: Blob): Promise<void> => {
+interface ReloadPdfRecord {
+  blob: Blob;
+  fileName: string;
+}
+
+const saveReloadPdfBlob = async (blob: Blob, fileName: string): Promise<void> => {
   const database = await openReloadPdfDatabase();
   try {
     await new Promise<void>((resolve, reject) => {
       const transaction = database.transaction(RELOAD_PDF_STORE_NAME, "readwrite");
       const store = transaction.objectStore(RELOAD_PDF_STORE_NAME);
-      store.put({ id: RELOAD_PDF_RECORD_KEY, blob });
+      store.put({ id: RELOAD_PDF_RECORD_KEY, blob, fileName });
       transaction.oncomplete = () => resolve();
       transaction.onerror = () =>
         reject(transaction.error ?? new Error("PDFキャッシュの保存に失敗しました。"));
@@ -572,16 +577,29 @@ const saveReloadPdfBlob = async (blob: Blob): Promise<void> => {
   }
 };
 
-const loadReloadPdfBlob = async (): Promise<Blob | null> => {
+const loadReloadPdfRecord = async (): Promise<ReloadPdfRecord | null> => {
   const database = await openReloadPdfDatabase();
   try {
-    return await new Promise<Blob | null>((resolve, reject) => {
+    return await new Promise<ReloadPdfRecord | null>((resolve, reject) => {
       const transaction = database.transaction(RELOAD_PDF_STORE_NAME, "readonly");
       const store = transaction.objectStore(RELOAD_PDF_STORE_NAME);
       const request = store.get(RELOAD_PDF_RECORD_KEY);
       request.onsuccess = () => {
-        const result = request.result as { id: string; blob?: unknown } | undefined;
-        resolve(result?.blob instanceof Blob ? result.blob : null);
+        const result =
+          request.result as { id: string; blob?: unknown; fileName?: unknown } | undefined;
+        if (!(result?.blob instanceof Blob)) {
+          resolve(null);
+          return;
+        }
+        resolve({
+          blob: result.blob,
+          fileName:
+            typeof result.fileName === "string"
+              ? result.fileName
+              : result.blob instanceof File
+                ? result.blob.name
+                : "",
+        });
       };
       request.onerror = () =>
         reject(request.error ?? new Error("PDFキャッシュの読み込みに失敗しました。"));
@@ -1651,6 +1669,7 @@ export function DataEntryForm() {
     useState<BanchiPadFieldName | null>(null);
 
   const [pdfFile, setPdfFile] = useState<string | null>(null);
+  const [pdfFileName, setPdfFileName] = useState("");
   const [savedEntries, setSavedEntries] = useState<SavedEntry[]>([]);
   const [savedResidentEntries, setSavedResidentEntries] = useState<SavedResidentEntry[]>([]);
   const [editingBasicEntryId, setEditingBasicEntryId] = useState<number | null>(null);
@@ -1947,6 +1966,7 @@ export function DataEntryForm() {
   const addressWorkerRef = useRef<Worker | null>(null);
   const currentPdfObjectUrlRef = useRef<string | null>(null);
   const currentPdfBlobRef = useRef<Blob | null>(null);
+  const currentPdfFileNameRef = useRef("");
   const hasReloadStateRestoredRef = useRef(false);
   const requestSerialRef = useRef(0);
   const latestRequestIdRef = useRef<Record<SuggestionType, number>>({
@@ -2212,17 +2232,20 @@ export function DataEntryForm() {
 
     void (async () => {
       try {
-        const blob = await loadReloadPdfBlob();
-        if (!blob) {
+        const record = await loadReloadPdfRecord();
+        if (!record) {
           return;
         }
+        const { blob, fileName } = record;
         const url = URL.createObjectURL(blob);
         if (currentPdfObjectUrlRef.current) {
           URL.revokeObjectURL(currentPdfObjectUrlRef.current);
         }
         currentPdfObjectUrlRef.current = url;
         currentPdfBlobRef.current = blob;
+        currentPdfFileNameRef.current = fileName;
         setPdfFile(url);
+        setPdfFileName(fileName);
       } catch {
         // PDFキャッシュ復元失敗は無視
       }
@@ -2283,8 +2306,11 @@ export function DataEntryForm() {
       return;
     }
 
-    void saveReloadPdfBlob(currentPdfBlobRef.current).catch(() => undefined);
-  }, [isSettingsHydrated, settings.isReloadStatePersistenceEnabled, pdfFile]);
+    const fileNameForCache = currentPdfFileNameRef.current || pdfFileName;
+    void saveReloadPdfBlob(currentPdfBlobRef.current, fileNameForCache).catch(
+      () => undefined
+    );
+  }, [isSettingsHydrated, settings.isReloadStatePersistenceEnabled, pdfFile, pdfFileName]);
 
   useEffect(() => {
     if (!isSettingsHydrated || settings.isReloadStatePersistenceEnabled) {
@@ -3485,7 +3511,9 @@ export function DataEntryForm() {
     }
     currentPdfObjectUrlRef.current = url;
     currentPdfBlobRef.current = file;
+    currentPdfFileNameRef.current = file.name;
     setPdfFile(url);
+    setPdfFileName(file.name);
   };
 
   const createBasicEntryFromForm = () => {
@@ -4150,6 +4178,8 @@ export function DataEntryForm() {
       basicEntry.banchi,
     ]);
     const isSecondaryMapping = effectiveBasicSheetSelection === "basicSecondary";
+    const currentPdfFileName = currentPdfFileNameRef.current.trim() || pdfFileName.trim();
+    const defaultDColumnValue = isSecondaryMapping ? basicEntry.name : integratedAddress;
 
     const payload: BasicSheetWritePayload = {
       action: "appendBasicRow",
@@ -4161,7 +4191,7 @@ export function DataEntryForm() {
         A: basicEntry.operator,
         B: basicEntry.filename,
         C: isSecondaryMapping ? basicEntry.position : postalCodeForWrite,
-        D: isSecondaryMapping ? basicEntry.name : integratedAddress,
+        D: currentPdfFileName || defaultDColumnValue,
         E: isSecondaryMapping ? basicEntry.company : basicEntry.building,
         F: isSecondaryMapping ? postalCodeForWrite : basicEntry.company,
         G: isSecondaryMapping ? integratedAddress : basicEntry.position,
