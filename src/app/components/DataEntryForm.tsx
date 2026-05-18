@@ -35,6 +35,7 @@ import {
   getReloadStateBehavior,
   isReloadPersistenceEnabled,
 } from "../lib/reloadStateBehavior.js";
+import { detectPdfTransferDestinationNotice } from "../lib/pdfTransferDestinationNotice.js";
 import { getWriteShortcutAction } from "../lib/writeShortcut.js";
 import {
   buildSheetUrlWithGid,
@@ -1670,6 +1671,8 @@ export function DataEntryForm() {
 
   const [pdfFile, setPdfFile] = useState<string | null>(null);
   const [pdfFileName, setPdfFileName] = useState("");
+  const [hasPdfTransferDestinationNotice, setHasPdfTransferDestinationNotice] =
+    useState(false);
   const [savedEntries, setSavedEntries] = useState<SavedEntry[]>([]);
   const [savedResidentEntries, setSavedResidentEntries] = useState<SavedResidentEntry[]>([]);
   const [editingBasicEntryId, setEditingBasicEntryId] = useState<number | null>(null);
@@ -2246,6 +2249,7 @@ export function DataEntryForm() {
         currentPdfFileNameRef.current = fileName;
         setPdfFile(url);
         setPdfFileName(fileName);
+        void updatePdfTransferDestinationNotice(blob);
       } catch {
         // PDFキャッシュ復元失敗は無視
       }
@@ -3498,6 +3502,19 @@ export function DataEntryForm() {
     input.click();
   };
 
+  const updatePdfTransferDestinationNotice = async (blob: Blob) => {
+    try {
+      const hasNotice = await detectPdfTransferDestinationNotice(blob);
+      if (currentPdfBlobRef.current === blob) {
+        setHasPdfTransferDestinationNotice(hasNotice);
+      }
+    } catch {
+      if (currentPdfBlobRef.current === blob) {
+        setHasPdfTransferDestinationNotice(false);
+      }
+    }
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     e.target.value = "";
@@ -3514,6 +3531,8 @@ export function DataEntryForm() {
     currentPdfFileNameRef.current = file.name;
     setPdfFile(url);
     setPdfFileName(file.name);
+    setHasPdfTransferDestinationNotice(false);
+    void updatePdfTransferDestinationNotice(file);
   };
 
   const createBasicEntryFromForm = () => {
@@ -6881,8 +6900,24 @@ export function DataEntryForm() {
                 <div className="grid grid-cols-2 gap-6">
                   {/* 左列：転出 */}
                   <div className="space-y-4">
-                    <div className="bg-blue-50 px-3 py-2 rounded">
-                      <h3 className="text-sm font-semibold text-blue-700">転出</h3>
+                    <div
+                      className={`px-3 py-2 rounded ${
+                        hasPdfTransferDestinationNotice
+                          ? "resident-transfer-destination-notice"
+                          : "bg-blue-50"
+                      }`}
+                    >
+                      <h3
+                        className={`text-sm font-semibold ${
+                          hasPdfTransferDestinationNotice
+                            ? "text-red-800"
+                            : "text-blue-700"
+                        }`}
+                      >
+                        {hasPdfTransferDestinationNotice
+                          ? "転出先の住所に注意！"
+                          : "転出"}
+                      </h3>
                     </div>
                     
                     {/* 転出地名 */}
