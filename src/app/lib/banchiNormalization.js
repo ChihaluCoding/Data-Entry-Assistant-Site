@@ -36,8 +36,11 @@ const toHalfWidthAlphabet = (rawValue) => {
 };
 
 const ANY_KANJI_PATTERN = /[\u3400-\u4DBF\u4E00-\u9FFF々〆ヵヶ]/g;
+const TRAILING_KANJI_PATTERN = /[\u3400-\u4DBF\u4E00-\u9FFF々〆ヵヶ]$/;
 const HIRAGANA_BANCHI_SEPARATOR_PATTERN = /(ちょうめ|ばんち|ばん|ごう)/g;
+const TRAILING_HIRAGANA_BANCHI_SEPARATOR_PATTERN = /(ちょうめ|ばんち|ばん|ごう)$/;
 const DASH_VARIANT_PATTERN = /[-‐‑‒–—―ｰー－]+/g;
+const TRAILING_DASH_VARIANT_PATTERN = /[-‐‑‒–—―ｰー－]$/;
 const BANCHI_CALCULATOR_DIGIT_PATTERN = /^[0-9０-９]$/;
 
 const formatBanchiValue = (rawValue, options = {}) => {
@@ -63,6 +66,14 @@ const formatBanchiValue = (rawValue, options = {}) => {
     .replace(DASH_VARIANT_PATTERN, hyphen);
 
   if (options.preserveEdgeHyphen) {
+    if (
+      !TRAILING_DASH_VARIANT_PATTERN.test(trimmed) &&
+      (TRAILING_KANJI_PATTERN.test(trimmed) ||
+        TRAILING_HIRAGANA_BANCHI_SEPARATOR_PATTERN.test(trimmed))
+    ) {
+      return normalizedValue.replace(new RegExp(`${hyphen}+$`, "g"), "");
+    }
+
     return normalizedValue;
   }
 

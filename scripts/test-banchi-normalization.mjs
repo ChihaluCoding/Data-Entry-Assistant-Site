@@ -50,6 +50,18 @@ test("番地入力中は単独や末尾のハイフンを保持する", () => {
   assert.equal(normalizeBanchiValueForInputAsFullWidth("１２-"), "１２－");
 });
 
+test("番地入力中でも貼り付け末尾の漢字区切りから生成されたハイフンは残さない", () => {
+  assert.equal(normalizeBanchiValueForInputAsHalfWidth("1丁目2-3番"), "1－2－3");
+  assert.equal(normalizeBanchiValueForInputAsHalfWidth("1丁目2-3番地"), "1－2－3");
+  assert.equal(normalizeBanchiValueForInputAsFullWidth("1丁目2-3番"), "１－２－３");
+  assert.equal(normalizeBanchiValueForInputAsFullWidth("1丁目2-3番地"), "１－２－３");
+});
+
+test("番地入力中でも貼り付け末尾のひらがな区切りから生成されたハイフンは残さない", () => {
+  assert.equal(normalizeBanchiValueForInputAsHalfWidth("1ちょうめ2ばん"), "1－2");
+  assert.equal(normalizeBanchiValueForInputAsFullWidth("1ちょうめ2ばん"), "１－２");
+});
+
 test("番地電卓キーは数字と区切りの追加、末尾削除、クリアができる", () => {
   assert.equal(applyBanchiCalculatorKey("", "1"), "1");
   assert.equal(applyBanchiCalculatorKey("12", "dash"), "12－");

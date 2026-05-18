@@ -26,6 +26,10 @@ import {
   normalizeBanchiValueAsHalfWidth,
 } from "../lib/banchiNormalization.js";
 import {
+  normalizeBuildingSelectedSpacingAndDash,
+  normalizeBuildingValue,
+} from "../lib/buildingNormalization.js";
+import {
   formatAreaFieldValue,
   isNativeImeComposing,
   resolveAreaFieldValue,
@@ -986,16 +990,6 @@ const toHalfWidthDigits = (rawValue: string): string => {
   return rawValue.replace(/[０-９]/g, (char) =>
     String.fromCharCode(char.charCodeAt(0) - 0xfee0)
   );
-};
-
-const toFullWidthAlphabet = (rawValue: string): string => {
-  return rawValue.replace(/[A-Za-z]/g, (char) =>
-    String.fromCharCode(char.charCodeAt(0) + 0xfee0)
-  );
-};
-
-const normalizeBuildingValue = (rawValue: string): string => {
-  return toFullWidthAlphabet(rawValue);
 };
 
 const COMPANY_SHORTCUT_MAP: Record<string, string> = {
@@ -1966,6 +1960,9 @@ export function DataEntryForm() {
   const pdfUploadInputRef = useRef<HTMLInputElement | null>(null);
   const basicFolderInputRef = useRef<HTMLInputElement>(null);
   const residentFolderInputRef = useRef<HTMLInputElement>(null);
+  const buildingInputRef = useRef<HTMLInputElement | null>(null);
+  const departBuildingInputRef = useRef<HTMLInputElement | null>(null);
+  const registryBuildingInputRef = useRef<HTMLInputElement | null>(null);
   const addressWorkerRef = useRef<Worker | null>(null);
   const currentPdfObjectUrlRef = useRef<string | null>(null);
   const currentPdfBlobRef = useRef<Blob | null>(null);
@@ -3077,6 +3074,89 @@ export function DataEntryForm() {
       ) as ResidentFormData;
     });
   };
+
+  const restoreInputSelection = (
+    input: HTMLInputElement,
+    selectionStart: number,
+    selectionEnd: number
+  ) => {
+    window.requestAnimationFrame(() => {
+      input.focus();
+      input.setSelectionRange(selectionStart, selectionEnd);
+    });
+  };
+
+  const handleBuildingSelectionFullWidth = (
+    fieldName: "building" | "departBuilding" | "registryBuilding",
+    input: HTMLInputElement | null
+  ) => {
+    if (!input) {
+      return;
+    }
+
+    const selectionStart = input.selectionStart ?? 0;
+    const selectionEnd = input.selectionEnd ?? selectionStart;
+    const normalized = normalizeBuildingSelectedSpacingAndDash(
+      input.value,
+      selectionStart,
+      selectionEnd
+    );
+
+    if (!normalized.changed) {
+      restoreInputSelection(input, selectionStart, selectionEnd);
+      return;
+    }
+
+    if (fieldName === "building") {
+      setFormData((prev) => ({
+        ...prev,
+        building: normalized.value,
+      }));
+    } else {
+      const syncFieldsOverride =
+        fieldName === "registryBuilding" &&
+        residentRegistrySyncFields.registryBuilding
+          ? {
+              ...residentRegistrySyncFields,
+              registryBuilding: false,
+            }
+          : residentRegistrySyncFields;
+
+      if (
+        fieldName === "registryBuilding" &&
+        residentRegistrySyncFields.registryBuilding
+      ) {
+        setResidentRegistrySyncFields((prev) => ({
+          ...prev,
+          registryBuilding: false,
+        }));
+      }
+
+      updateResidentFormField(fieldName, normalized.value, syncFieldsOverride);
+      setResidentActiveSection(fieldName === "departBuilding" ? "depart" : "registry");
+    }
+
+    restoreInputSelection(input, normalized.selectionStart, normalized.selectionEnd);
+  };
+
+  const renderBuildingSelectionFullWidthButton = (
+    fieldName: "building" | "departBuilding" | "registryBuilding",
+    inputRef: React.RefObject<HTMLInputElement>
+  ) => (
+    <button
+      type="button"
+      onMouseDown={(event) => {
+        event.preventDefault();
+      }}
+      onClick={() => {
+        handleBuildingSelectionFullWidth(fieldName, inputRef.current);
+      }}
+      className="shrink-0 rounded border border-gray-300 bg-white px-2.5 py-2 text-xs text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
+      title="選択範囲の空白とハイフン系記号を全角にします"
+    >
+      空白・ー全角
+    </button>
+  );
 
   const getBanchiPadFieldValue = (fieldName: BanchiPadFieldName): string => {
     if (fieldName === "banchi") {
@@ -6384,14 +6464,21 @@ export function DataEntryForm() {
                     <label className="block text-sm text-gray-700 mb-1.5">
                       建物名
                     </label>
-                    <input
-                      type="text"
-                      name="building"
-                      value={formData.building}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="建物名を入力"
-                    />
+                    <div className="flex gap-2">
+                      <input
+                        ref={buildingInputRef}
+                        type="text"
+                        name="building"
+                        value={formData.building}
+                        onChange={handleChange}
+                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="建物名を入力"
+                      />
+                      {renderBuildingSelectionFullWidthButton(
+                        "building",
+                        buildingInputRef
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -7482,14 +7569,21 @@ export function DataEntryForm() {
                       <label className="block text-sm text-gray-700 mb-1.5">
                         建物名
                       </label>
-                      <input
-                        type="text"
-                        name="departBuilding"
-                        value={residentFormData.departBuilding}
-                        onChange={handleResidentChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="転出建物名を入力"
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          ref={departBuildingInputRef}
+                          type="text"
+                          name="departBuilding"
+                          value={residentFormData.departBuilding}
+                          onChange={handleResidentChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="転出建物名を入力"
+                        />
+                        {renderBuildingSelectionFullWidthButton(
+                          "departBuilding",
+                          departBuildingInputRef
+                        )}
+                      </div>
                     </div>
                   </div>
 
@@ -7984,14 +8078,21 @@ export function DataEntryForm() {
                         <label className="block text-sm text-gray-700">建物名</label>
                         {renderRegistrySyncCheckbox("registryBuilding")}
                       </div>
-                      <input
-                        type="text"
-                        name="registryBuilding"
-                        value={residentFormData.registryBuilding}
-                        onChange={handleResidentChange}
-                        className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        placeholder="本籍建物名を入力"
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          ref={registryBuildingInputRef}
+                          type="text"
+                          name="registryBuilding"
+                          value={residentFormData.registryBuilding}
+                          onChange={handleResidentChange}
+                          className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="本籍建物名を入力"
+                        />
+                        {renderBuildingSelectionFullWidthButton(
+                          "registryBuilding",
+                          registryBuildingInputRef
+                        )}
+                      </div>
                     </div>
 
                     {/* 通称・別名 */}
