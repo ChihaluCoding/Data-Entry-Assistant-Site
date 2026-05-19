@@ -12,6 +12,7 @@ import {
 test("住民票モード向け番地は半角入力でも全角化される", () => {
   assert.equal(normalizeBanchiValueAsFullWidth("1-2"), "１－２");
   assert.equal(normalizeBanchiValueAsFullWidth("A-12"), "Ａ－１２");
+  assert.equal(normalizeBanchiValueAsFullWidth("１　－　２"), "１－２");
 });
 
 test("住民票モード向け番地はIMEの長音記号も全角ハイフンへ統一する", () => {
@@ -20,6 +21,7 @@ test("住民票モード向け番地はIMEの長音記号も全角ハイフン�
 
 test("住民票モード向け番地は丁目や番も全角ハイフンへ統一する", () => {
   assert.equal(normalizeBanchiValueAsFullWidth("3丁目42番19－50"), "３－４２－１９－５０");
+  assert.equal(normalizeBanchiValueAsFullWidth("一丁目１２３４番"), "１－１２３４");
   assert.equal(normalizeBanchiValueAsFullWidth("3ちょうめ42ばん19ごう"), "３－４２－１９");
   assert.equal(normalizeBanchiValueAsFullWidth("1番地"), "１");
   assert.equal(normalizeBanchiValueAsFullWidth("1ばんち"), "１");
@@ -39,6 +41,10 @@ test("基本モード向け番地は英数字を半角維持しつつ漢字を�
   assert.equal(normalizeBanchiValueAsHalfWidth("１－２"), "1－2");
   assert.equal(normalizeBanchiValueAsHalfWidth("Ａー１２"), "A－12");
   assert.equal(normalizeBanchiValueAsHalfWidth("3丁目42番19－50"), "3－42－19－50");
+  assert.equal(normalizeBanchiValueAsHalfWidth("一丁目１２３４番"), "1－1234");
+  assert.equal(normalizeBanchiValueAsHalfWidth("一 丁目 １２３４ 番"), "1－1234");
+  assert.equal(normalizeBanchiValueAsHalfWidth("1 － 2"), "1－2");
+  assert.equal(normalizeBanchiValueAsHalfWidth("十二丁目三番"), "12－3");
   assert.equal(normalizeBanchiValueAsHalfWidth("3ちょうめ42ばん19ごう"), "3－42－19");
   assert.equal(normalizeBanchiValueAsHalfWidth("3甲42乙19丙50"), "3－42－19－50");
 });
@@ -51,8 +57,12 @@ test("番地入力中は単独や末尾のハイフンを保持する", () => {
 });
 
 test("番地入力中でも貼り付け末尾の漢字区切りから生成されたハイフンは残さない", () => {
+  assert.equal(normalizeBanchiValueForInputAsHalfWidth("一丁目１２３４番"), "1－1234");
+  assert.equal(normalizeBanchiValueForInputAsHalfWidth("一 丁目 １２３４ 番"), "1－1234");
   assert.equal(normalizeBanchiValueForInputAsHalfWidth("1丁目2-3番"), "1－2－3");
   assert.equal(normalizeBanchiValueForInputAsHalfWidth("1丁目2-3番地"), "1－2－3");
+  assert.equal(normalizeBanchiValueForInputAsFullWidth("一丁目１２３４番"), "１－１２３４");
+  assert.equal(normalizeBanchiValueForInputAsFullWidth("１　－　２"), "１－２");
   assert.equal(normalizeBanchiValueForInputAsFullWidth("1丁目2-3番"), "１－２－３");
   assert.equal(normalizeBanchiValueForInputAsFullWidth("1丁目2-3番地"), "１－２－３");
 });
